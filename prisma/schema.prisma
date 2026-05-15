@@ -1,0 +1,147 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums (using string fields since SQLite doesn't support native enums) ───
+
+model User {
+  id          String   @id @default(uuid())
+  name        String
+  studentId   String?  @unique // Only for students
+  email       String   @unique
+  password    String
+  role        String   @default("STUDENT") // STUDENT | STAFF | ADMIN
+  dormBlockId String?  // Primary block (for students or staff check-in)
+  roomId      String?  // The specific room the student lives in
+  phone       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  dormBlock          DormBlock?             @relation("PrimaryBlock", fields: [dormBlockId], references: [id])
+  room               DormRoom?              @relation("RoomOccupants", fields: [roomId], references: [id])
+  managedBlocks      DormBlock[]            @relation("BlockManagers") // Multi-block staffing
+  keyCustodianFor    DormRoom?              @relation("KeyCustodian") // If they are the key custodian for a room
+  
+  submittedTickets   EmergencyTicket[]      @relation("TicketSubmitter")
+  assignedTickets    EmergencyTicket[]      @relation("TicketAssignee")
+  shifts             ShiftRegistry[]
+  clearanceRequests  GateClearanceRequest[] @relation("ClearanceRequester")
+  approvedClearances GateClearanceRequest[] @relation("ClearanceApprover")
+  attendanceLogs     AttendanceLog[]        @relation("AttendanceStudent")
+  scannedLogs        AttendanceLog[]        @relation("AttendanceScanner")
+}
+
+model DormBlock {
+  id              String   @id @default(uuid())
+  name            String
+  number          Int      @unique
+  latitude        Float    @default(0)
+  longitude       Float    @default(0)
+  geofenceRadius  Float    @default(100) // meters
+  capacity        Int      @default(200)
+  createdAt       DateTime @default(now())
+
+  users            User[]            @relation("PrimaryBlock")
+  managers         User[]            @relation("BlockManagers")
+  rooms            DormRoom[]
+  shifts           ShiftRegistry[]
+  assignedShifts   ShiftRegistry[]   @relation("ShiftBlocks")
+  emergencyTickets EmergencyTicket[]
+  attendanceLogs   AttendanceLog[]
+}
+
+model DormRoom {
+  id             String   @id @default(uuid())
+  roomNumber     String
+  dormBlockId    String
+  keyCustodianId String?  @unique
+  
+  dormBlock      DormBlock @relation(fields: [dormBlockId], references: [id])
+  keyCustodian   User?     @relation("KeyCustodian", fields: [keyCustodianId], references: [id])
+  occupants      User[]    @relation("RoomOccupants")
+  assets         RoomAsset[]
+}
+
+model RoomAsset {
+  id       String @id @default(uuid())
+  roomId   String
+  type     String // CHAIR | LOCKER | TABLE | BED | KEY | OTHER
+  quantity Int    @default(1)
+  status   String @default("GOOD") // GOOD | DAMAGED | MISSING
+
+  room DormRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+}
+
+model ShiftRegistry {
+  id                 String    @id @default(uuid())
+  staffId            String
+  primaryBlockId     String
+  shiftName          String    @default("Standard Shift")
+  status             String    @default("SCHEDULED") // SCHEDULED | PRESENT | ABSENT | OUT_OF_BOUNDS
+  startTime          DateTime  @default(now())
+  endTime            DateTime?
+  isActive           Boolean   @default(false)
+  checkedInAt        DateTime?
+  geofenceVerified   Boolean   @default(false)
+  latitude           Float?
+  longitude          Float?
+  distanceDelta      Float?    // Distance in meters from assigned primary block
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @default(now()) @updatedAt
+
+  staff        User      @relation(fields: [staffId], references: [id])
+  primaryBlock DormBlock @relation(fields: [primaryBlockId], references: [id])
+  blocks       DormBlock[] @relation("ShiftBlocks") // Multi-block assignment
+}
+
+model EmergencyTicket {
+  id              String   @id @default(uuid())
+  studentId       String
+  dormBlockId     String
+  category        String   // WATER | ELECTRICAL | STRUCTURAL
+  description     String?
+  status          String   @default("OPEN") // OPEN | IN_PROGRESS | RESOLVED
+  assignedStaffId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  resolvedAt      DateTime?
+
+  student       User      @relation("TicketSubmitter", fields: [studentId], references: [id])
+  assignedStaff User?     @relation("TicketAssignee", fields: [assignedStaffId], references: [id])
+  dormBlock     DormBlock @relation(fields: [dormBlockId], references: [id])
+}
+
+model GateClearanceRequest {
+  id                   String    @id @default(uuid())
+  studentId            String
+  status               String    @default("PENDING") // PENDING | APPROVED | REJECTED
+  verificationToken    String?   @unique
+  tokenExpiresAt       DateTime?
+  approvedById         String?
+  approvedAt           DateTime?
+  rejectionReason      String?
+  flaggedMissingAssets String?   // Logs missing assets if rejected based on room audit
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  student    User  @relation("ClearanceRequester", fields: [studentId], references: [id])
+  approvedBy User? @relation("ClearanceApprover", fields: [approvedById], references: [id])
+}
+
+model AttendanceLog {
+  id          String   @id @default(uuid())
+  studentId   String
+  dormBlockId String
+  scannedById String
+  timestamp   DateTime @default(now())
+  method      String   @default("QR_SCAN") // QR_SCAN | MANUAL_LOOKUP
+
+  student   User      @relation("AttendanceStudent", fields: [studentId], references: [id])
+  scanner   User      @relation("AttendanceScanner", fields: [scannedById], references: [id])
+  dormBlock DormBlock @relation(fields: [dormBlockId], references: [id])
+}
