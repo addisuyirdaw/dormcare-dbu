@@ -174,7 +174,7 @@ export default async function AdminPage() {
   const primaryBlock = blocks[0]?.number ?? 1;
   const aiRecommendation =
     waterSpikePct > 0
-      ? `AI Analysis: Infrastructure reports indicate recurring load spikes in Block ${primaryBlock}. Water utility complaints rose **${waterSpikePct}%** week-over-week with **${electricThisWeek}** electrical escalations. Recommendation: Schedule preventive pump maintenance within the next **48 hours** to minimize future emergency utility outages.`
+      ? `AI Analysis: Infrastructure reports indicate recurring load spikes in Block ${primaryBlock}. Water utility complaints rose ${waterSpikePct}% week-over-week with ${electricThisWeek} electrical escalations. Recommendation: Schedule preventive pump maintenance within the next 48 hours to minimize future emergency utility outages.`
       : `AI Analysis: Block ${primaryBlock} utility telemetry is stable. Continue standard valve inspections and maintain on-call electrician roster for peak evening load windows.`;
 
   const serviceAnalytics = {

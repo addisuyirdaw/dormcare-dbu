@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Scanner from '@/components/Scanner';
 
@@ -15,6 +15,44 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
   const [checkingIn, setCheckingIn] = useState(false);
   const [geoError, setGeoError] = useState('');
   const [updatingTicket, setUpdatingTicket] = useState<string | null>(null);
+  
+  // UI Toggles
+  const [showTicketHistory, setShowTicketHistory] = useState(false);
+  const [showClearanceHistory, setShowClearanceHistory] = useState(false);
+  
+  // Split Data
+  const activeTickets = tickets.filter((t: any) => t.status === 'OPEN' || t.status === 'IN_PROGRESS');
+  const resolvedTickets = tickets.filter((t: any) => t.status === 'RESOLVED').slice(0, 5);
+  
+  const activeClearances = pendingClearances.filter((c: any) => c.status === 'PENDING' || c.status === 'PENDING_STAFF_SIGNATURE');
+  const resolvedClearances = pendingClearances.filter((c: any) => c.status !== 'PENDING' && c.status !== 'PENDING_STAFF_SIGNATURE').slice(0, 5);
+
+  // Notification Logic
+  const [prevClearanceCount, setPrevClearanceCount] = useState(activeClearances.length);
+  
+  const playAlert = () => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.2);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      osc.start();
+      gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + 0.5);
+      osc.stop(ctx.currentTime + 0.5);
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    if (activeClearances.length > prevClearanceCount) {
+      playAlert(); // Play sound if a new clearance request arrives
+    }
+    setPrevClearanceCount(activeClearances.length);
+  }, [activeClearances.length, prevClearanceCount]);
   
   // Clearance Audit Modal State
   const [auditModal, setAuditModal] = useState<any | null>(null);
@@ -343,17 +381,17 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
         <div className="card">
           <div className="card-header flex items-center justify-between">
             <h3>🚨 Emergency Queue <span className="text-xs font-normal text-muted ml-2">({user.managedBlocks?.length} Blocks)</span></h3>
-            <span className="badge badge-red">{tickets.length}</span>
+            <span className="badge badge-red">{activeTickets.length}</span>
           </div>
           <div className="card-p">
-            {!activeShift && tickets.length > 0 && (
+            {!activeShift && activeTickets.length > 0 && (
               <div className="alert alert-warn mb-4">You must start your shift to resolve tickets.</div>
             )}
-            {tickets.length === 0 ? (
+            {activeTickets.length === 0 ? (
               <p className="text-sec text-sm text-center py-8">No active emergencies across your managed blocks.</p>
             ) : (
               <div className="flex flex-col gap-3">
-                {tickets.map((t: any) => (
+                {activeTickets.map((t: any) => (
                   <div key={t.id} className="card" style={{ padding: '12px 16px', background: 'var(--bg-raised)' }}>
                     <div className="flex justify-between items-start mb-2">
                       <div className="flex items-center gap-2">
@@ -383,24 +421,60 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
                 ))}
               </div>
             )}
+
+            {/* Resolved Tickets History */}
+            {resolvedTickets.length > 0 && (
+              <div className="mt-8 border-t border-white/10 pt-4">
+                <button 
+                  className="flex justify-between items-center w-full text-left hover:text-white transition-colors"
+                  onClick={() => setShowTicketHistory(!showTicketHistory)}
+                >
+                  <span className="text-xs text-sec uppercase tracking-wider font-bold">Recently Resolved ({resolvedTickets.length})</span>
+                  <span className="text-sec text-xs">{showTicketHistory ? '▼' : '▶'}</span>
+                </button>
+                
+                {showTicketHistory && (
+                  <div className="flex flex-col gap-2 mt-4">
+                    {resolvedTickets.map((t: any) => (
+                      <div key={t.id} className="flex justify-between items-center text-sm p-3 rounded" style={{ background: 'var(--bg-raised)', opacity: 0.7 }}>
+                        <div className="flex items-center gap-2">
+                          <span className="text-green-500">✓</span>
+                          <span className="font-bold">{t.category}</span>
+                          <span className="text-xs text-sec">• Room {t.student.room?.roomNumber}</span>
+                        </div>
+                        <span className="text-xs text-muted">{new Date(t.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
         {/* Pending Gate Clearances */}
         <div className="card">
           <div className="card-header flex items-center justify-between">
-            <h3>📦 Final Clearances</h3>
-            <span className="badge badge-amber">{pendingClearances.length}</span>
+            <h3 className="flex items-center gap-2">
+              📦 Final Clearances
+              {activeClearances.length > 0 && (
+                <span className="flex h-3 w-3 relative ml-1">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-amber-500"></span>
+                </span>
+              )}
+            </h3>
+            <span className="badge badge-amber">{activeClearances.length}</span>
           </div>
           <div className="card-p">
-            {!activeShift && pendingClearances.length > 0 && (
+            {!activeShift && activeClearances.length > 0 && (
               <div className="alert alert-warn mb-4">You must start your shift to perform room audits.</div>
             )}
-            {pendingClearances.length === 0 ? (
+            {activeClearances.length === 0 ? (
               <p className="text-sec text-sm text-center py-8">No pending clearances.</p>
             ) : (
               <div className="flex flex-col gap-3">
-                {pendingClearances.map((c: any) => (
+                {activeClearances.map((c: any) => (
                   <div key={c.id} className="card" style={{ padding: '16px', background: 'var(--bg-raised)' }}>
                     <div className="flex justify-between items-start mb-3">
                       <div>
@@ -421,6 +495,35 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
                 ))}
               </div>
             )}
+
+            {/* Clearances History */}
+            {resolvedClearances.length > 0 && (
+              <div className="mt-8 border-t border-white/10 pt-4">
+                <button 
+                  className="flex justify-between items-center w-full text-left hover:text-white transition-colors"
+                  onClick={() => setShowClearanceHistory(!showClearanceHistory)}
+                >
+                  <span className="text-xs text-sec uppercase tracking-wider font-bold">Recent Clearances ({resolvedClearances.length})</span>
+                  <span className="text-sec text-xs">{showClearanceHistory ? '▼' : '▶'}</span>
+                </button>
+                
+                {showClearanceHistory && (
+                  <div className="flex flex-col gap-2 mt-4">
+                    {resolvedClearances.map((c: any) => (
+                      <div key={c.id} className="flex justify-between items-center text-sm p-3 rounded" style={{ background: 'var(--bg-raised)', opacity: 0.7 }}>
+                        <div className="flex flex-col">
+                          <span className="font-bold">{c.student.name}</span>
+                          <span className="text-xs text-sec">Room {c.student.room?.roomNumber} • {new Date(c.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                        <span className={`badge ${c.status === 'APPROVED' ? 'badge-green' : 'badge-red'}`} style={{ fontSize: '0.6rem' }}>
+                          {c.status.replace(/_/g, ' ')}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -436,8 +539,35 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
               <p className="text-center py-8 text-sec"><span className="spinner"></span> Loading Room Data...</p>
             ) : (
               <>
+                {auditModal.personalItems && (
+                  <div className="mb-6 p-4 rounded border border-amber-500/30 bg-amber-950/20">
+                    <p className="text-xs text-amber-500 font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                      <span className="text-lg">🎒</span> Declared Personal Belongings
+                    </p>
+                    {(() => {
+                      try {
+                        const items = JSON.parse(auditModal.personalItems);
+                        return (
+                          <div className="flex flex-col gap-2 text-sm">
+                            <div className="flex justify-between items-center border-b border-white/5 pb-1"><span className="text-sec">Trousers:</span> <span className="font-bold">{items.trousers || 0}</span></div>
+                            <div className="flex justify-between items-center border-b border-white/5 pb-1"><span className="text-sec">Sweaters / Jackets:</span> <span className="font-bold">{items.jackets || 0}</span></div>
+                            <div className="flex justify-between items-center border-b border-white/5 pb-1"><span className="text-sec">Laptops / Electronics:</span> <span className="font-bold">{items.electronics || 0}</span></div>
+                            {items.otherItems && items.otherItems.map((item: any, i: number) => (
+                              <div key={i} className="flex justify-between items-center border-b border-white/5 pb-1"><span className="text-sec">{item.name}:</span> <span className="font-bold text-blue-300">{item.count}</span></div>
+                            ))}
+                          </div>
+                        );
+                      } catch (e) {
+                        return <div className="text-xs text-sec">No extra items declared or error parsing.</div>;
+                      }
+                    })()}
+                  </div>
+                )}
+
                 <div className="mb-6 p-4 rounded" style={{ background: 'var(--bg-raised)' }}>
-                  <p className="text-xs text-sec font-bold uppercase tracking-wider mb-3">Registered Baseline Inventory</p>
+                  <p className="text-xs text-sec font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
+                    <span className="text-lg">📋</span> Registered Baseline Inventory
+                  </p>
                   {roomAssets.length === 0 ? (
                     <div className="alert alert-warn p-3 text-xs">
                       No baseline assets registered for this room! Ensure room is manually inspected carefully.

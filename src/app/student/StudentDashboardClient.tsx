@@ -25,6 +25,27 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
   const [error, setError] = useState('');
   const [myAssets, setMyAssets] = useState<any[]>([]);
   const [loadingAssets, setLoadingAssets] = useState(true);
+  
+  // UI Toggles
+  const [showMyClearances, setShowMyClearances] = useState(true);
+  const [showMyTickets, setShowMyTickets] = useState(true);
+
+  // NEW STATE: Personal Belongings Declaration
+  const [trousers, setTrousers] = useState(0);
+  const [jackets, setJackets] = useState(0);
+  const [electronics, setElectronics] = useState(0);
+  const [customItems, setCustomItems] = useState<{name: string, count: number}[]>([]);
+
+  const addCustomItem = () => setCustomItems([...customItems, { name: '', count: 1 }]);
+  const updateCustomItem = (index: number, field: 'name' | 'count', value: any) => {
+    const newItems = [...customItems];
+    if (field === 'name') newItems[index].name = value;
+    else newItems[index].count = parseInt(value) || 0;
+    setCustomItems(newItems);
+  };
+  const removeCustomItem = (index: number) => {
+    setCustomItems(customItems.filter((_, i) => i !== index));
+  };
 
   useEffect(() => {
     fetch('/api/inventory/my-assets')
@@ -69,6 +90,14 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
       const res = await fetch('/api/clearance', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          personalItems: {
+            trousers,
+            jackets,
+            electronics,
+            otherItems: customItems.filter(item => item.name.trim() !== '' && item.count > 0)
+          }
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -222,7 +251,15 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
             <p className="text-sm text-sec mb-4">
               <strong>Note:</strong> Staff will verify the Official Room Inventory. If any asset is missing, clearance will be denied.
             </p>
-            <button id="start-clearance-btn" className="btn btn-primary btn-block" onClick={() => { setView('clearance'); setClearanceSuccess(null); setError(''); }}>
+            <button id="start-clearance-btn" className="btn btn-primary btn-block" onClick={() => { 
+              setView('clearance'); 
+              setClearanceSuccess(null); 
+              setError(''); 
+              setTrousers(0);
+              setJackets(0);
+              setElectronics(0);
+              setCustomItems([]);
+            }}>
               Request Room Audit
             </button>
           </div>
@@ -247,50 +284,70 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
       {/* Clearances List */}
       {clearances.length > 0 && (
         <div className="card mb-6">
-          <div className="card-header"><h3>🔑 My Clearances</h3></div>
-          <div className="table-wrap">
-            <table className="table">
-              <thead><tr><th>Type</th><th>Status</th><th>Token</th><th>Notes</th><th>Date</th></tr></thead>
-              <tbody>
-                {clearances.map((c: any) => (
-                  <tr key={c.id}>
-                    <td>Room Audit</td>
-                    <td><span className={`badge ${c.status === 'APPROVED' ? 'badge-green' : c.status === 'PENDING' ? 'badge-amber' : 'badge-red'}`}>{c.status}</span></td>
-                    <td className="font-mono text-green">{c.verificationToken || '—'}</td>
-                    <td>{c.flaggedMissingAssets ? <span className="text-red">Missing: {c.flaggedMissingAssets}</span> : c.approvedBy?.name || '—'}</td>
-                    <td className="text-xs text-muted">{new Date(c.createdAt).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="card-header border-b border-white/10 pb-4">
+            <button 
+              className="flex justify-between items-center w-full text-left hover:text-white transition-colors"
+              onClick={() => setShowMyClearances(!showMyClearances)}
+            >
+              <h3 className="mb-0">🔑 My Clearances</h3>
+              <span className="text-sec text-xs">{showMyClearances ? '▼' : '▶'}</span>
+            </button>
           </div>
+          {showMyClearances && (
+            <div className="table-wrap border-t-0">
+              <table className="table">
+                <thead><tr><th>Type</th><th>Status</th><th>Token</th><th>Notes</th><th>Date</th></tr></thead>
+                <tbody>
+                  {clearances.map((c: any) => (
+                    <tr key={c.id}>
+                      <td>Room Audit</td>
+                      <td><span className={`badge ${c.status === 'APPROVED' ? 'badge-green' : c.status === 'PENDING' ? 'badge-amber' : c.status === 'PENDING_STAFF_SIGNATURE' ? 'badge-amber' : 'badge-red'}`}>{c.status.replace(/_/g, ' ')}</span></td>
+                      <td className="font-mono text-green">{c.verificationToken || '—'}</td>
+                      <td>{c.flaggedMissingAssets ? <span className="text-red">Missing: {c.flaggedMissingAssets}</span> : c.approvedBy?.name || '—'}</td>
+                      <td className="text-xs text-muted">{new Date(c.createdAt).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
       {/* Tickets List */}
       {tickets.length > 0 && (
         <div className="card">
-          <div className="card-header"><h3>🎫 My Tickets</h3></div>
-          <div className="table-wrap">
-            <table className="table">
-              <thead><tr><th>Category</th><th>Description</th><th>Assigned To</th><th>Status</th><th>Date</th></tr></thead>
-              <tbody>
-                {tickets.map((t: any) => (
-                  <tr key={t.id}>
-                    <td>
-                      <span className="flex items-center gap-2">
-                        {CATEGORY_CONFIG[t.category as keyof typeof CATEGORY_CONFIG]?.icon} {t.category}
-                      </span>
-                    </td>
-                    <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.description || '—'}</td>
-                    <td>{t.assignedStaff?.name || <span className="text-muted">Unassigned</span>}</td>
-                    <td><span className={`badge ${STATUS_BADGE[t.status]}`}>{t.status.replace('_', ' ')}</span></td>
-                    <td className="text-xs text-muted">{new Date(t.createdAt).toLocaleDateString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="card-header border-b border-white/10 pb-4">
+            <button 
+              className="flex justify-between items-center w-full text-left hover:text-white transition-colors"
+              onClick={() => setShowMyTickets(!showMyTickets)}
+            >
+              <h3 className="mb-0">🎫 My Tickets</h3>
+              <span className="text-sec text-xs">{showMyTickets ? '▼' : '▶'}</span>
+            </button>
           </div>
+          {showMyTickets && (
+            <div className="table-wrap border-t-0">
+              <table className="table">
+                <thead><tr><th>Category</th><th>Description</th><th>Assigned To</th><th>Status</th><th>Date</th></tr></thead>
+                <tbody>
+                  {tickets.map((t: any) => (
+                    <tr key={t.id}>
+                      <td>
+                        <span className="flex items-center gap-2">
+                          {CATEGORY_CONFIG[t.category as keyof typeof CATEGORY_CONFIG]?.icon} {t.category}
+                        </span>
+                      </td>
+                      <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.description || '—'}</td>
+                      <td>{t.assignedStaff?.name || <span className="text-muted">Unassigned</span>}</td>
+                      <td><span className={`badge ${STATUS_BADGE[t.status]}`}>{t.status.replace('_', ' ')}</span></td>
+                      <td className="text-xs text-muted">{new Date(t.createdAt).toLocaleDateString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -346,12 +403,25 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
       <button className="btn btn-ghost btn-sm mb-6" onClick={() => setView('home')}>← Back</button>
       {clearanceSuccess ? (
         <div className="card card-p animate-in">
-          <h2 className="mb-2">✅ Audit Requested</h2>
-          <p className="text-sec mb-6">Staff have been notified to perform a baseline asset audit on Room {user?.room?.roomNumber}. Check back later for your digital exit token.</p>
-          <div className="token-display" style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)' }}>
-            <p className="text-sm text-sec mb-2">Request ID</p>
-            <div className="font-mono text-xl text-muted">{(clearanceSuccess.clearanceRecord?.id || clearanceSuccess.id || 'Pending').substring(0, 8).toUpperCase()}</div>
-          </div>
+          {clearanceSuccess.status === 'PENDING_STAFF_SIGNATURE' ? (
+            <>
+              <h2 className="mb-2 text-amber-500">⏳ Status: Pending Proctor Signature</h2>
+              <p className="text-sec mb-6">Your items have been logged. Please wait for an inspection proctor to digitally sign your release form.</p>
+              <div className="token-display" style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)' }}>
+                <p className="text-sm text-sec mb-2">Request ID</p>
+                <div className="font-mono text-xl text-muted">{(clearanceSuccess.clearanceRecord?.id || clearanceSuccess.id || 'Pending').substring(0, 8).toUpperCase()}</div>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="mb-2">✅ Audit Requested</h2>
+              <p className="text-sec mb-6">Staff have been notified to perform a baseline asset audit on Room {user?.room?.roomNumber}. Check back later for your digital exit token.</p>
+              <div className="token-display" style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)' }}>
+                <p className="text-sm text-sec mb-2">Request ID</p>
+                <div className="font-mono text-xl text-muted">{(clearanceSuccess.clearanceRecord?.id || clearanceSuccess.id || 'Pending').substring(0, 8).toUpperCase()}</div>
+              </div>
+            </>
+          )}
           <button className="btn btn-ghost btn-block mt-6" onClick={() => setView('home')}>Back to Dashboard</button>
         </div>
       ) : (
@@ -363,9 +433,94 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
             Make sure all university-issued chairs, lockers, beds, tables, and room keys are present.
           </div>
 
+          <div className="mb-6 border-t border-slate-700 pt-6">
+            <h3 className="mb-2">Personal Belongings Declaration Form</h3>
+            <p className="text-sm text-sec mb-4">Please register your personal items for exit counting.</p>
+            
+            <div className="flex flex-col gap-4">
+              <div className="flex justify-between items-center">
+                <label className="font-medium">Trousers</label>
+                <input 
+                  type="number" 
+                  min="0" 
+                  value={trousers} 
+                  onChange={(e) => setTrousers(parseInt(e.target.value) || 0)}
+                  className="form-input" 
+                  style={{ width: '80px', background: 'var(--bg-raised)', border: '1px solid var(--border)' }}
+                />
+              </div>
+              <div className="flex justify-between items-center">
+                <label className="font-medium">Sweaters / Jackets</label>
+                <input 
+                  type="number" 
+                  min="0" 
+                  value={jackets} 
+                  onChange={(e) => setJackets(parseInt(e.target.value) || 0)}
+                  className="form-input" 
+                  style={{ width: '80px', background: 'var(--bg-raised)', border: '1px solid var(--border)' }}
+                />
+              </div>
+              <div className="flex justify-between items-center">
+                <label className="font-medium">Laptops / Electronics</label>
+                <input 
+                  type="number" 
+                  min="0" 
+                  value={electronics} 
+                  onChange={(e) => setElectronics(parseInt(e.target.value) || 0)}
+                  className="form-input" 
+                  style={{ width: '80px', background: 'var(--bg-raised)', border: '1px solid var(--border)' }}
+                />
+              </div>
+              
+              {/* Dynamic Custom Items */}
+              {customItems.length > 0 && (
+                <div className="flex flex-col gap-3 mt-2 border-t border-white/10 pt-3">
+                  <label className="font-medium text-sm text-sec">Other Items</label>
+                  {customItems.map((item, idx) => (
+                    <div key={idx} className="flex gap-2 items-center">
+                      <input 
+                        type="text" 
+                        placeholder="Item name (e.g., Shoes, Books)" 
+                        value={item.name} 
+                        onChange={(e) => updateCustomItem(idx, 'name', e.target.value)}
+                        className="form-input flex-1" 
+                        style={{ background: 'var(--bg-raised)', border: '1px solid var(--border)', fontSize: '14px' }}
+                      />
+                      <input 
+                        type="number" 
+                        min="1" 
+                        value={item.count} 
+                        onChange={(e) => updateCustomItem(idx, 'count', e.target.value)}
+                        className="form-input" 
+                        style={{ width: '70px', background: 'var(--bg-raised)', border: '1px solid var(--border)' }}
+                      />
+                      <button 
+                        type="button" 
+                        onClick={() => removeCustomItem(idx)}
+                        className="btn btn-ghost p-2 text-red-400 hover:text-red-300 hover:bg-red-950/30"
+                        title="Remove item"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <button 
+                type="button" 
+                onClick={addCustomItem}
+                className="btn btn-ghost text-blue-400 hover:bg-blue-900/20 hover:text-blue-300 w-full mt-2"
+                style={{ border: '1px dashed var(--border)' }}
+              >
+                + Add Other Item
+              </button>
+            </div>
+          </div>
+
           {error && <div className="alert alert-error mb-4">{error}</div>}
           <button id="submit-clearance-btn" className="btn btn-primary btn-block btn-lg" onClick={handleClearanceSubmit} disabled={submitting}>
-            {submitting ? <><span className="spinner" /> Submitting…</> : '📤 Submit Request'}
+            {submitting ? <><span className="spinner" /> Submitting…</> : '📤 Submit Declaration'}
           </button>
         </div>
       )}

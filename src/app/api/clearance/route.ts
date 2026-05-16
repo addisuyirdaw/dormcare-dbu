@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
     
     requests = await prisma.gateClearanceRequest.findMany({
       where: { 
-        status: 'PENDING',
+        status: { in: ['PENDING', 'PENDING_STAFF_SIGNATURE'] },
         student: { dormBlockId: { in: managedBlockIds } } 
       },
       include: { 
@@ -58,6 +58,10 @@ export async function POST(req: NextRequest) {
     if (!studentId) {
       return NextResponse.json({ error: 'studentId is required.' }, { status: 400 });
     }
+
+    const body = await req.json().catch(() => ({}));
+    const { personalItems } = body;
+    const personalItemsStr = personalItems ? JSON.stringify(personalItems) : null;
 
     // 1. Relational Fetching: Student -> Room -> Assets
     const student = await prisma.user.findUnique({
@@ -119,22 +123,21 @@ export async function POST(req: NextRequest) {
       }, { status: 403 });
     }
 
-    // 5. SUCCESS LOGIC: Clean state, generate secure DBU token
-    const secureToken = `DBU-${uuidv4().split('-')[0].toUpperCase()}`;
-
-    const approvedRequest = await prisma.gateClearanceRequest.create({
+    // 5. SUCCESS LOGIC: Clean state, change to PENDING_STAFF_SIGNATURE
+    // We no longer auto-approve and generate token immediately.
+    
+    const pendingRequest = await prisma.gateClearanceRequest.create({
       data: {
         studentId,
-        status: 'APPROVED',
-        verificationToken: secureToken,
-      }
+        status: 'PENDING_STAFF_SIGNATURE',
+        personalItems: personalItemsStr,
+      } as any
     });
 
     return NextResponse.json({
-      status: 'APPROVED',
-      message: 'Gate clearance granted. No pending property issues found.',
-      token: secureToken,
-      clearanceRecord: approvedRequest
+      status: 'PENDING_STAFF_SIGNATURE',
+      message: 'Items logged. Pending Proctor Signature.',
+      clearanceRecord: pendingRequest
     }, { status: 200 });
 
   } catch (error: any) {

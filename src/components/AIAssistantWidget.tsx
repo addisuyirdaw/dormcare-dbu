@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { usePathname } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 
 type MessageTone = 'normal' | 'critical';
@@ -93,6 +94,7 @@ function getCrisisLeadIn(type: CrisisType): string {
 }
 
 export default function AIAssistantWidget() {
+  const pathname = usePathname();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE]);
   const [inputMessage, setInputMessage] = useState('');
@@ -222,67 +224,125 @@ export default function AIAssistantWidget() {
   };
 
   const bubbleClass = (msg: Message) => {
-    if (msg.sender === 'user') {
-      return 'max-w-[88%] rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-3 text-sm text-white shadow-md';
-    }
-    if (msg.tone === 'critical') {
-      return 'max-w-[92%] rounded-2xl rounded-tl-sm border-2 border-red-500/80 bg-red-950 px-4 py-3 text-sm text-red-50 shadow-[0_0_20px_rgba(239,68,68,0.35)]';
-    }
-    return 'max-w-[85%] rounded-2xl rounded-tl-sm border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-md';
+    if (msg.sender === 'user') return 'bot-msg-user';
+    if (msg.tone === 'critical') return 'bot-msg-critical';
+    return 'bot-msg-ai';
   };
 
   const markdownClass = (msg: Message) =>
-    msg.tone === 'critical'
-      ? 'prose prose-sm max-w-none prose-p:my-1 prose-strong:text-red-300 prose-strong:font-bold text-red-50'
-      : 'prose prose-sm max-w-none prose-p:my-1 prose-strong:text-blue-700 text-slate-800';
+    msg.tone === 'critical' ? 'bot-md bot-md-critical' : 'bot-md bot-md-normal';
+
+  // Ensure it renders everywhere
+  // if (pathname === '/login') return null;
 
   return (
-    <div className="fixed bottom-6 right-6 z-[999999] font-sans text-left text-slate-200">
+    <>
+      <style>{`
+        .bot-trigger {
+          position: fixed; bottom: 32px; right: 32px; z-index: 999999;
+          display: flex; align-items: center; gap: 12px;
+          background: linear-gradient(135deg, #2563eb, #4f46e5);
+          color: #fff; padding: 14px 24px; border-radius: 999px;
+          font-weight: 700; border: none; cursor: pointer;
+          box-shadow: 0 10px 30px rgba(37,99,235,0.6);
+          transition: transform 0.2s, box-shadow 0.2s;
+          font-family: system-ui, sans-serif;
+        }
+        .bot-trigger:hover {
+          transform: scale(1.05);
+          box-shadow: 0 12px 40px rgba(37,99,235,0.7);
+        }
+        .bot-panel {
+          position: fixed; bottom: 24px; right: 24px; z-index: 999999;
+          width: 420px; height: 600px; max-width: calc(100vw - 48px); max-height: calc(100vh - 48px);
+          display: flex; flex-direction: column;
+          background: #0f172a; border: 1px solid #334155;
+          border-radius: 16px; overflow: hidden;
+          box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+          font-family: system-ui, sans-serif; color: #f1f5f9;
+        }
+        .bot-header {
+          background: #2563eb; padding: 16px;
+          display: flex; justify-content: space-between; align-items: center;
+          font-weight: 700; flex-shrink: 0;
+        }
+        .bot-messages {
+          flex: 1; overflow-y: auto; padding: 16px;
+          display: flex; flex-direction: column; gap: 16px;
+          background: #020617;
+        }
+        .bot-msg-user {
+          align-self: flex-end; background: #2563eb; color: #fff;
+          padding: 12px 16px; border-radius: 16px 16px 4px 16px;
+          max-width: 88%; font-size: 14px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .bot-msg-ai {
+          align-self: flex-start; background: #ffffff; color: #1e293b;
+          padding: 12px 16px; border-radius: 16px 16px 16px 4px;
+          max-width: 85%; font-size: 14px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        .bot-msg-critical {
+          align-self: flex-start; background: #450a0a; color: #fef2f2;
+          border: 2px solid rgba(239,68,68,0.8);
+          padding: 12px 16px; border-radius: 16px 16px 16px 4px;
+          max-width: 92%; font-size: 14px;
+          box-shadow: 0 0 20px rgba(239,68,68,0.35);
+        }
+        .bot-footer {
+          padding: 16px; background: #0f172a; border-top: 1px solid #1e293b;
+          flex-shrink: 0;
+        }
+        .bot-input-group { display: flex; gap: 8px; margin-top: 12px;}
+        .bot-input {
+          flex: 1; padding: 10px 16px; border-radius: 8px;
+          background: #020617; border: 1px solid #334155; color: #fff; font-size: 14px;
+        }
+        .bot-input:focus { outline: none; border-color: #3b82f6; }
+        .bot-send {
+          background: #2563eb; color: #fff; border: none; padding: 10px 16px;
+          border-radius: 8px; font-weight: 700; cursor: pointer; font-size: 14px;
+        }
+        .bot-send:disabled { opacity: 0.5; cursor: not-allowed; }
+        .bot-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+        .bot-chip {
+          background: #1e293b; color: #cbd5e1; border: 1px solid #334155;
+          padding: 4px 10px; border-radius: 99px; font-size: 11px; cursor: pointer;
+        }
+        .bot-chip-critical {
+          background: rgba(69,10,10,0.8); border-color: rgba(220,38,38,0.6); color: #fecaca;
+        }
+        .bot-chip-warn {
+          background: rgba(69,26,0,0.8); border-color: rgba(217,119,6,0.6); color: #fde68a;
+        }
+        .bot-md p { margin-top: 4px; margin-bottom: 4px; }
+        .bot-md-normal strong { color: #1d4ed8; }
+        .bot-md-critical strong { color: #fca5a5; }
+      `}</style>
+
       {!isOpen ? (
-        <button
-          type="button"
-          onClick={() => setIsOpen(true)}
-          aria-label="Open DormCare Assistant"
-          className="flex cursor-pointer items-center gap-2.5 rounded-full bg-gradient-to-r from-blue-600 to-indigo-600 px-5 py-3.5 font-bold text-white shadow-[0_4px_20px_rgba(37,99,235,0.4)] transition-all hover:scale-105 hover:from-blue-700 hover:to-indigo-700"
-        >
-          <span className="text-xl leading-none">🤖</span>
-          <span>Ask DormCare AI</span>
-          <span className="relative ml-0.5 flex h-2.5 w-2.5">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-400" />
-          </span>
+        <button type="button" onClick={() => setIsOpen(true)} className="bot-trigger" aria-label="Open DormCare Assistant">
+          <span style={{ fontSize: '28px' }}>🤖</span>
+          <span style={{ fontSize: '16px', letterSpacing: '0.5px' }}>Ask DormCare AI</span>
         </button>
       ) : (
-        <div className="flex h-[550px] w-[380px] flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl">
-          <div className="flex shrink-0 items-center justify-between bg-blue-600 p-4 font-bold text-white">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/30 bg-white/20 text-xl">
-                🤖
-              </div>
-              <div className="flex flex-col">
-                <span className="text-base leading-tight">DormCare Assistant</span>
-                <span className="mt-0.5 flex items-center gap-1.5 text-xs font-medium text-red-100">
-                  <span className="h-2 w-2 animate-pulse rounded-full bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.8)]" />
+        <div className="bot-panel">
+          <div className="bot-header">
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ fontSize: '24px' }}>🤖</div>
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                <span style={{ fontSize: '16px' }}>DormCare Assistant</span>
+                <span style={{ fontSize: '12px', color: '#fecaca', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ width: '8px', height: '8px', background: '#ef4444', borderRadius: '50%', boxShadow: '0 0 8px red' }}></span>
                   Live · ICS Ready
                 </span>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setIsOpen(false)}
-              aria-label="Close DormCare Assistant"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full font-bold text-blue-100 transition-colors hover:bg-blue-700 hover:text-white"
-            >
-              ✕
-            </button>
+            <button type="button" onClick={() => setIsOpen(false)} style={{ background: 'transparent', border: 'none', color: '#fff', fontSize: '20px', cursor: 'pointer' }}>✕</button>
           </div>
 
-          <div className="flex flex-1 flex-col space-y-3 overflow-y-auto bg-slate-950 p-4">
+          <div className="bot-messages">
             {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex w-full ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+              <div key={msg.id} style={{ display: 'flex', width: '100%', justifyContent: msg.sender === 'user' ? 'flex-end' : 'flex-start' }}>
                 <div className={bubbleClass(msg)}>
                   {msg.sender === 'ai' ? (
                     <div className={markdownClass(msg)}>
@@ -296,22 +356,8 @@ export default function AIAssistantWidget() {
             ))}
 
             {isLoading && (
-              <div className="flex w-full justify-start">
-                <div className="flex items-center gap-2 rounded-2xl rounded-tl-sm border border-red-800/60 bg-red-950/80 px-4 py-3 text-xs text-red-200">
-                  <div className="flex gap-1">
-                    <span
-                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-red-400"
-                      style={{ animationDelay: '0ms' }}
-                    />
-                    <span
-                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-red-400"
-                      style={{ animationDelay: '150ms' }}
-                    />
-                    <span
-                      className="h-1.5 w-1.5 animate-bounce rounded-full bg-red-400"
-                      style={{ animationDelay: '300ms' }}
-                    />
-                  </div>
+              <div style={{ display: 'flex', width: '100%', justifyContent: 'flex-start' }}>
+                <div style={{ padding: '8px 12px', background: 'rgba(69,10,10,0.8)', border: '1px solid rgba(153,27,27,0.6)', color: '#fecaca', borderRadius: '12px', fontSize: '12px' }}>
                   Executing incident playbook…
                 </div>
               </div>
@@ -319,86 +365,35 @@ export default function AIAssistantWidget() {
             <div ref={messagesEndRef} />
           </div>
 
-          <div className="shrink-0 border-t border-slate-800 bg-slate-900 p-3">
+          <div className="bot-footer">
             {verifiedStudentId && (
-              <div className="mb-2 space-y-2">
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    disabled={isLoading}
-                    onClick={() =>
-                      handleCrisisChip('🚨 Water Main Burst (Trigger Alarm)', 'water')
-                    }
-                    className="rounded-full border border-red-600/60 bg-red-950/80 px-2.5 py-1 text-[10px] font-semibold text-red-200 transition-colors hover:bg-red-900 hover:text-white disabled:opacity-50"
-                  >
-                    🚨 Water Main Burst (Trigger Alarm)
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isLoading}
-                    onClick={() =>
-                      handleCrisisChip('🔌 Total Block Blackout (Initiate Call)', 'blackout')
-                    }
-                    className="rounded-full border border-amber-600/60 bg-amber-950/80 px-2.5 py-1 text-[10px] font-semibold text-amber-100 transition-colors hover:bg-amber-900 hover:text-white disabled:opacity-50"
-                  >
-                    🔌 Total Block Blackout (Initiate Call)
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isLoading}
-                    onClick={() =>
-                      handleCrisisChip('📋 System Health Dashboard', 'dashboard')
-                    }
-                    className="rounded-full border border-slate-600 bg-slate-800 px-2.5 py-1 text-[10px] text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:opacity-50"
-                  >
-                    📋 System Health Dashboard
-                  </button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div className="bot-chips">
+                  <button type="button" disabled={isLoading} onClick={() => handleCrisisChip('🚨 Water Main Burst (Trigger Alarm)', 'water')} className="bot-chip bot-chip-critical">🚨 Water Main Burst (Trigger Alarm)</button>
+                  <button type="button" disabled={isLoading} onClick={() => handleCrisisChip('🔌 Total Block Blackout (Initiate Call)', 'blackout')} className="bot-chip bot-chip-warn">🔌 Total Block Blackout (Initiate Call)</button>
+                  <button type="button" disabled={isLoading} onClick={() => handleCrisisChip('📋 System Health Dashboard', 'dashboard')} className="bot-chip">📋 System Health Dashboard</button>
                 </div>
-                <div className="flex flex-wrap gap-1.5">
-                  <button
-                    type="button"
-                    disabled={isLoading}
-                    onClick={() => handleQuickReply('📋 View Assets')}
-                    className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-[11px] text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:opacity-50"
-                  >
-                    📋 View Assets
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isLoading}
-                    onClick={() => handleQuickReply('🔧 Report Fault (AM)')}
-                    className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1 text-[11px] text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:opacity-50"
-                  >
-                    🔧 Report Fault (AM)
-                  </button>
+                <div className="bot-chips">
+                  <button type="button" disabled={isLoading} onClick={() => handleQuickReply('📋 View Assets')} className="bot-chip">📋 View Assets</button>
+                  <button type="button" disabled={isLoading} onClick={() => handleQuickReply('🔧 Report Fault (AM)')} className="bot-chip">🔧 Report Fault (AM)</button>
                 </div>
               </div>
             )}
 
-            <form onSubmit={handleSendMessage} className="flex gap-2">
+            <form onSubmit={handleSendMessage} className="bot-input-group">
               <input
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder={
-                  verifiedStudentId
-                    ? 'Try: flood, blackout, gate pass…'
-                    : 'Enter Student ID (e.g. DBU1500962)'
-                }
-                className="flex-1 rounded-lg border border-slate-700 bg-slate-950 px-4 py-2 text-sm text-slate-100 transition-colors placeholder:text-slate-500 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50"
+                placeholder={verifiedStudentId ? 'Try: flood, blackout, gate pass…' : 'Enter Student ID (e.g. DBU1500962)'}
+                className="bot-input"
                 disabled={isLoading}
               />
-              <button
-                type="submit"
-                disabled={!inputMessage.trim() || isLoading}
-                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-blue-500 disabled:opacity-50"
-              >
-                Send
-              </button>
+              <button type="submit" disabled={!inputMessage.trim() || isLoading} className="bot-send">Send</button>
             </form>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }
