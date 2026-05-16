@@ -33,30 +33,62 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
   const [draftAssets, setDraftAssets] = useState<{ type: string, quantity: number }[]>([]);
   const [savingAssets, setSavingAssets] = useState(false);
 
-  // ── Geofenced Check-in ──
+  // ── Geofenced Check-in with Selfie Verification ──
   const handleCheckIn = async () => {
     setCheckingIn(true); setGeoError('');
+    let selfieImage = '';
+
+    // Step 1: Capture selfie from device camera
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      await video.play();
+
+      // Give camera 800ms to warm up, then grab a frame
+      await new Promise(r => setTimeout(r, 800));
+      const canvas = document.createElement('canvas');
+      canvas.width  = 320;
+      canvas.height = 240;
+      canvas.getContext('2d')!.drawImage(video, 0, 0, 320, 240);
+      selfieImage = canvas.toDataURL('image/jpeg', 0.7);
+
+      stream.getTracks().forEach(t => t.stop()); // release camera
+    } catch {
+      setGeoError('⚠️ Camera access is required for secure check-in. Please allow camera access and try again.');
+      setCheckingIn(false);
+      return;
+    }
+
+    // Step 2: Get GPS coordinates
     try {
       if (!navigator.geolocation) throw new Error('Geolocation not supported by browser.');
       const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
         navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 10000 });
       });
+
+      // Step 3: Send selfie + GPS to server together
       const res = await fetch('/api/shifts/checkin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+        body: JSON.stringify({
+          latitude:    pos.coords.latitude,
+          longitude:   pos.coords.longitude,
+          selfieImage,                        // base64 frame from camera
+        }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Check-in failed');
-      
+
       if (data.shift?.status === 'OUT_OF_BOUNDS') {
-        setGeoError(`⚠️ Out of Bounds Alert: You are ${data.distance}m from your assigned office (Max 50m). This location discrepancy has been logged to the Admin Command Center.`);
+        setGeoError(`⚠️ Out of Bounds: You are ${data.distance}m from your assigned office (Max 50m). This has been logged with your selfie to the Admin Command Center.`);
       }
-      
+
       router.refresh();
-    } catch (err: any) { setGeoError(err.message || 'Location access denied or timed out. Please allow location access in your browser settings.'); } 
+    } catch (err: any) { setGeoError(err.message || 'Location access denied or timed out. Please allow location access in your browser settings.'); }
     finally { setCheckingIn(false); }
   };
+
 
   const handleCheckOut = async () => {
     if (!confirm('Are you sure you want to end your shift?')) return;

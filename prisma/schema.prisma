@@ -34,6 +34,9 @@ model User {
   approvedClearances GateClearanceRequest[] @relation("ClearanceApprover")
   attendanceLogs     AttendanceLog[]        @relation("AttendanceStudent")
   scannedLogs        AttendanceLog[]        @relation("AttendanceScanner")
+  maintenanceTickets MaintenanceTicket[]    @relation("MaintenanceReporter")
+  issueReports       IssueReport[]          @relation("ReportedIssues")
+  assignedAssets     InventoryItem[]        @relation("AssignedAssets")
 }
 
 model DormBlock {
@@ -57,7 +60,7 @@ model DormBlock {
 
 model DormRoom {
   id             String   @id @default(uuid())
-  roomNumber     String
+  roomNumber     String   @unique
   dormBlockId    String
   keyCustodianId String?  @unique
   
@@ -65,6 +68,7 @@ model DormRoom {
   keyCustodian   User?     @relation("KeyCustodian", fields: [keyCustodianId], references: [id])
   occupants      User[]    @relation("RoomOccupants")
   assets         RoomAsset[]
+  inventoryItems InventoryItem[] @relation("RoomInventory")
 }
 
 model RoomAsset {
@@ -75,6 +79,7 @@ model RoomAsset {
   status   String @default("GOOD") // GOOD | DAMAGED | MISSING
 
   room DormRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  maintenanceTickets MaintenanceTicket[]
 }
 
 model ShiftRegistry {
@@ -91,6 +96,11 @@ model ShiftRegistry {
   latitude           Float?
   longitude          Float?
   distanceDelta      Float?    // Distance in meters from assigned primary block
+
+  // ── Anti-Fraud Selfie Verification ──────────────────────────────────────
+  selfieImage        String?   // base64 data URI or HTTPS URL captured at check-in
+  selfieTimestamp    DateTime? // Server-side timestamp when selfie was received
+
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @default(now()) @updatedAt
 
@@ -116,6 +126,24 @@ model EmergencyTicket {
   dormBlock     DormBlock @relation(fields: [dormBlockId], references: [id])
 }
 
+// ── Maintenance-to-Clearance Audit Loop ─────────────────────────────────────
+// Tracks physical damage to a specific room asset and blocks gate clearance
+// until every PENDING ticket is resolved by a proctor.
+model MaintenanceTicket {
+  id          String   @id @default(uuid())
+  studentId   String   // Student who reported / is responsible
+  assetId     String   // The specific RoomAsset that is damaged/missing
+  category    String   // DAMAGED | MISSING | WORN
+  description String?
+  status      String   @default("PENDING") // PENDING | IN_PROGRESS | RESOLVED
+  resolvedAt  DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  student User      @relation("MaintenanceReporter", fields: [studentId], references: [id])
+  asset   RoomAsset @relation(fields: [assetId], references: [id])
+}
+
 model GateClearanceRequest {
   id                   String    @id @default(uuid())
   studentId            String
@@ -133,6 +161,19 @@ model GateClearanceRequest {
   approvedBy User? @relation("ClearanceApprover", fields: [approvedById], references: [id])
 }
 
+// ── Unified Digital Audit Loop ──────────────────────────────────────────────
+model IssueReport {
+  id          String   @id @default(uuid())
+  studentId   String
+  roomNumber  String
+  category    String   // WATER | ELECTRICITY | SAFETY | FACILITY
+  description String
+  status      String   @default("OPEN") // OPEN | RESOLVED
+  createdAt   DateTime @default(now())
+
+  student     User     @relation("ReportedIssues", fields: [studentId], references: [id])
+}
+
 model AttendanceLog {
   id          String   @id @default(uuid())
   studentId   String
@@ -144,4 +185,17 @@ model AttendanceLog {
   student   User      @relation("AttendanceStudent", fields: [studentId], references: [id])
   scanner   User      @relation("AttendanceScanner", fields: [scannedById], references: [id])
   dormBlock DormBlock @relation(fields: [dormBlockId], references: [id])
+}
+
+// ── Asset Custodianship ─────────────────────────────────────────────────────
+model InventoryItem {
+  id          String   @id @default(uuid())
+  assetTag    String   @unique // e.g. "DBU-B3-R102-LCK-A"
+  itemName    String
+  condition   String   @default("GOOD") // GOOD | DAMAGED | MISSING
+  roomNumber  String
+  custodianId String?  // Maps to the specific student accountable
+
+  room      DormRoom @relation("RoomInventory", fields: [roomNumber], references: [roomNumber])
+  custodian User?    @relation("AssignedAssets", fields: [custodianId], references: [id])
 }

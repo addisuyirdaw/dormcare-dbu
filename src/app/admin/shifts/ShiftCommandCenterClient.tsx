@@ -1,6 +1,10 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
+
+// Dynamically import the map component to prevent SSR errors with Leaflet
+const StaffLocationMap = dynamic(() => import('@/components/StaffLocationMap'), { ssr: false });
 
 export default function ShiftCommandCenterClient({ staffMembers, blocks, initialShifts }: any) {
   const router = useRouter();
@@ -8,6 +12,7 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showMap, setShowMap] = useState(true);
 
   // Form State
   const [staffId, setStaffId] = useState('');
@@ -21,6 +26,17 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
   
   const [startTime, setStartTime] = useState(today8AM);
   const [endTime, setEndTime] = useState(today4PM);
+
+  // Auto-refresh shifts every 30 seconds for live tracking
+  useEffect(() => {
+    const interval = setInterval(async () => {
+      try {
+        const updated = await fetch('/api/admin/shifts').then(r => r.json());
+        if (Array.isArray(updated)) setShifts(updated);
+      } catch (e) {}
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleToggleBlock = (blockId: string) => {
     setSelectedBlocks(prev => 
@@ -56,13 +72,11 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
       }
 
       setSuccess('✅ Shift successfully assigned!');
-      // Reset form
       setStaffId('');
       setSelectedBlocks([]);
       
-      // Refresh list
       const updatedList = await fetch('/api/admin/shifts').then(r => r.json());
-      setShifts(updatedList);
+      if (Array.isArray(updatedList)) setShifts(updatedList);
       router.refresh();
       
       setTimeout(() => setSuccess(''), 3000);
@@ -75,12 +89,11 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
 
   // Live Status Badge Renderer
   const renderStatusBadge = (shift: any) => {
-    // If it's scheduled but the start time has passed and no check in, it might be ABSENT
     const nowTime = new Date().getTime();
     const startTimeTime = new Date(shift.startTime).getTime();
     
     let displayStatus = shift.status;
-    if (displayStatus === 'SCHEDULED' && nowTime > startTimeTime + (15 * 60000)) { // 15 mins late
+    if (displayStatus === 'SCHEDULED' && nowTime > startTimeTime + (15 * 60000)) {
       displayStatus = 'ABSENT';
     }
 
@@ -92,14 +105,112 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
     }
   };
 
+  // Separate checked-in shifts (those with GPS coordinates) for the map
+  const checkedInShifts = shifts.filter(s => s.latitude != null && s.longitude != null);
+  const presentCount = shifts.filter(s => s.status === 'PRESENT').length;
+  const outOfBoundsCount = shifts.filter(s => s.status === 'OUT_OF_BOUNDS').length;
+  const absentCount = shifts.filter(s => {
+    const nowTime = new Date().getTime();
+    const startT = new Date(s.startTime).getTime();
+    return s.status === 'SCHEDULED' && nowTime > startT + (15 * 60000);
+  }).length;
+
   return (
     <div className="container section animate-in">
+      {/* Header */}
       <div className="flex items-center gap-3 mb-6">
         <span style={{ fontSize: '2rem' }}>📡</span>
         <div>
           <h1>Staff Control & Geofence Center</h1>
-          <p className="text-sec mt-1">Assign multi-block shifts and monitor live staff geolocation compliance.</p>
+          <p className="text-sec mt-1">Assign multi-block shifts and monitor live staff GPS presence across campus.</p>
         </div>
+      </div>
+
+      {/* Live Stats Bar */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="card card-p text-center" style={{ borderColor: 'rgba(34,197,94,0.3)', background: 'rgba(34,197,94,0.05)' }}>
+          <div className="text-3xl font-mono font-black text-green">{presentCount}</div>
+          <div className="text-xs text-sec uppercase tracking-wider mt-1">✔ Verified Present</div>
+        </div>
+        <div className="card card-p text-center" style={{ borderColor: 'rgba(245,158,11,0.3)', background: 'rgba(245,158,11,0.05)' }}>
+          <div className="text-3xl font-mono font-black" style={{ color: '#f59e0b' }}>{outOfBoundsCount}</div>
+          <div className="text-xs text-sec uppercase tracking-wider mt-1">⚠ Out of Bounds</div>
+        </div>
+        <div className="card card-p text-center" style={{ borderColor: 'rgba(239,68,68,0.3)', background: 'rgba(239,68,68,0.05)' }}>
+          <div className="text-3xl font-mono font-black text-red-400">{absentCount}</div>
+          <div className="text-xs text-sec uppercase tracking-wider mt-1">✖ Absent / No Check-In</div>
+        </div>
+      </div>
+
+      {/* LIVE MAP SECTION */}
+      <div className="card mb-6">
+        <div className="card-header flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <h3>🗺️ Live Campus GPS Tracking Map</h3>
+            {checkedInShifts.length > 0 && (
+              <span className="badge badge-green text-xs animate-pulse">
+                🟢 {checkedInShifts.length} Staff Located
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2 items-center">
+            <span className="text-xs text-sec">Auto-refreshes every 30s</span>
+            <button
+              className="btn btn-sm btn-ghost border border-white/10 text-xs"
+              onClick={() => setShowMap(!showMap)}
+            >
+              {showMap ? '🗺️ Hide Map' : '🗺️ Show Map'}
+            </button>
+          </div>
+        </div>
+
+        {showMap && (
+          <div className="p-4 animate-in fade-in">
+            {/* Legend */}
+            <div className="flex flex-wrap gap-4 mb-4 text-xs">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ background: '#22c55e' }}></div>
+                <span className="text-sec">Present (In Office)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ background: '#f59e0b' }}></div>
+                <span className="text-sec">Out of Bounds</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-full" style={{ background: '#6366f1' }}></div>
+                <span className="text-sec">DBU Campus Center</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-4 h-0.5 border border-dashed border-indigo-500"></div>
+                <span className="text-sec">Campus Geofence (~500m)</span>
+              </div>
+            </div>
+
+            {checkedInShifts.length === 0 ? (
+              <div
+                className="flex flex-col items-center justify-center text-center gap-3"
+                style={{
+                  height: '420px',
+                  background: 'rgba(99,102,241,0.03)',
+                  border: '1px solid rgba(99,102,241,0.15)',
+                  borderRadius: '12px',
+                }}
+              >
+                <span style={{ fontSize: '3rem' }}>🗺️</span>
+                <div>
+                  <p className="font-bold text-lg">Awaiting Staff Check-Ins</p>
+                  <p className="text-sec text-sm mt-1">
+                    When a staff member starts their shift via browser GPS, their exact location<br />
+                    will appear as a live pin on this campus map.
+                  </p>
+                </div>
+                <div className="badge badge-primary mt-2">DBU Campus Center: 9.6759°N, 39.5338°E</div>
+              </div>
+            ) : (
+              <StaffLocationMap shifts={checkedInShifts} />
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid-3 gap-6 mb-8">
@@ -173,7 +284,7 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
               onClick={handleAssignShift}
               disabled={loading}
             >
-              {loading ? 'Assigning...' : 'Assign Shift'}
+              {loading ? 'Assigning...' : '📅 Assign Shift'}
             </button>
           </div>
         </div>
@@ -182,18 +293,22 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
         <div className="card" style={{ gridColumn: 'span 2' }}>
           <div className="card-header flex justify-between items-center">
             <h3>🔴 Live Tracking & Audit Ledger</h3>
-            <button className="btn btn-sm btn-ghost border border-white/10 text-xs" onClick={() => router.refresh()}>
+            <button className="btn btn-sm btn-ghost border border-white/10 text-xs" onClick={async () => {
+              const updated = await fetch('/api/admin/shifts').then(r => r.json());
+              if (Array.isArray(updated)) setShifts(updated);
+              router.refresh();
+            }}>
               🔄 Refresh
             </button>
           </div>
-          <div className="table-wrap" style={{ maxHeight: '600px', overflowY: 'auto' }}>
+          <div className="table-wrap" style={{ maxHeight: '500px', overflowY: 'auto' }}>
             <table className="table w-full">
               <thead className="sticky top-0 bg-[#161618] z-10 shadow-md border-b border-white/10">
                 <tr className="text-xs uppercase tracking-wider text-sec">
                   <th className="p-4 text-left font-bold">Staff Member</th>
                   <th className="p-4 text-left font-bold">Shift Details</th>
                   <th className="p-4 text-left font-bold">Live Status</th>
-                  <th className="p-4 text-left font-bold">Geofence Data</th>
+                  <th className="p-4 text-left font-bold">GPS Location</th>
                 </tr>
               </thead>
               <tbody>
@@ -231,14 +346,19 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
                             <span className="text-green font-mono">Δ {Math.round(shift.distanceDelta)}m (Valid)</span>
                           )}
                           {shift.latitude && shift.longitude && (
-                            <a 
-                              href={`https://www.google.com/maps?q=${shift.latitude},${shift.longitude}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="mt-1 text-accent hover:underline flex items-center gap-1"
-                            >
-                              🗺️ View on Map
-                            </a>
+                            <div className="flex flex-col gap-1 mt-1">
+                              <span className="text-[10px] text-muted font-mono">
+                                {shift.latitude.toFixed(4)}°N, {shift.longitude.toFixed(4)}°E
+                              </span>
+                              <a 
+                                href={`https://www.google.com/maps?q=${shift.latitude},${shift.longitude}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-accent hover:underline flex items-center gap-1 text-[10px]"
+                              >
+                                🌐 Open in Google Maps
+                              </a>
+                            </div>
                           )}
                         </div>
                       ) : (
