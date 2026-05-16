@@ -654,8 +654,8 @@ export default function LoginPage() {
                 {loading
                   ? 'Please wait…'
                   : mode === 'login'
-                  ? 'Login to Portal'
-                  : 'Create Account'}
+                    ? 'Login to Portal'
+                    : 'Create Account'}
               </button>
             </form>
 

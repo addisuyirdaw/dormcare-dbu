@@ -85,6 +85,16 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
 
   // ── Gate Clearance Submit ──
   const handleClearanceSubmit = async () => {
+    // Prevent zero-item declarations
+    const validCustomItems = customItems.filter(item => item.name.trim() !== '' && item.count > 0);
+    const totalCustomItems = validCustomItems.reduce((acc, item) => acc + item.count, 0);
+    const totalItems = trousers + jackets + electronics + totalCustomItems;
+
+    if (totalItems === 0) {
+      setError('You must declare at least one personal belonging to submit a declaration.');
+      return;
+    }
+
     setSubmitting(true); setError('');
     try {
       const res = await fetch('/api/clearance', {
@@ -95,7 +105,7 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
             trousers,
             jackets,
             electronics,
-            otherItems: customItems.filter(item => item.name.trim() !== '' && item.count > 0)
+            otherItems: validCustomItems
           }
         }),
       });
@@ -145,6 +155,32 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
           </div>
         )}
       </div>
+
+      {/* ── ACTIVE EXIT PASS (APPROVED CLEARANCE) ── */}
+      {clearances.filter((c: any) => c.status === 'APPROVED').map((c: any) => (
+        <div key={c.id} className="card mb-6 animate-in" style={{ background: 'linear-gradient(135deg, rgba(22,163,74,0.15) 0%, rgba(34,197,94,0.05) 100%)', border: '1px solid rgba(34,197,94,0.4)', boxShadow: '0 4px 20px rgba(34,197,94,0.1)' }}>
+          <div className="card-p flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <div className="flex items-center gap-2 mb-1">
+                <span className="badge" style={{ background: '#22c55e', color: '#000', fontWeight: 800, fontSize: '14px', padding: '6px 12px' }}>ACCEPTED</span>
+                <span className="text-green-400 font-bold tracking-wide">Ready for Departure</span>
+              </div>
+              <p className="text-sm text-sec mt-2 max-w-md">Your room audit is complete and your belongings have been verified by Proctor {c.approvedBy?.name}. You may now show this pass at the gate to leave the university.</p>
+              
+              <div className="mt-4 inline-block">
+                <span className="text-xs text-muted uppercase tracking-wider block mb-1 font-bold">Gate Exit Token</span>
+                <span className="font-mono text-2xl font-bold tracking-widest text-white bg-black/40 px-4 py-2 rounded-lg border border-green-500/30 shadow-inner">
+                  {c.verificationToken}
+                </span>
+              </div>
+            </div>
+            <div className="flex-shrink-0 text-center">
+              <div style={{ fontSize: '4.5rem', filter: 'drop-shadow(0 4px 8px rgba(0,0,0,0.3))' }}>🚪</div>
+              <div className="text-xs text-green-400 font-bold mt-2 tracking-widest uppercase">Exit Cleared</div>
+            </div>
+          </div>
+        </div>
+      ))}
 
       {/* Emergency Launcher */}
       <div className="card mb-6">

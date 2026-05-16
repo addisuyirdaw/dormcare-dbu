@@ -24,19 +24,35 @@ export default async function Home() {
           The all-in-one digital platform for Debre Birhan University. Streamline your housing experience with automated gate passes, real-time maintenance reporting, and secure staff shift verification.
         </p>
         
-        <div className="flex gap-4 items-center justify-center">
+        <div className="flex gap-4 items-center justify-center mb-16">
           {session ? (
             <Link href={dashboardLink} className="btn btn-primary btn-lg">
               Go to My Dashboard →
             </Link>
           ) : (
-            <Link href="/login" className="btn btn-primary btn-lg">
-              Secure Login
+            <Link href="/about" className="btn btn-primary btn-lg">
+              Learn More
             </Link>
           )}
-          <Link href="/about" className="btn btn-ghost btn-lg border border-white/20">
-            Learn More
-          </Link>
+        </div>
+
+        {/* Simple Features Grid */}
+        <div className="grid-3 gap-6 max-w-5xl mx-auto text-left w-full">
+          <div className="card card-p" style={{ background: 'var(--bg-raised)' }}>
+            <div className="text-3xl mb-3">🚪</div>
+            <h3 className="font-bold mb-2">Digital Gate Pass</h3>
+            <p className="text-sm text-sec">Students can request exit tokens digitally. Security can verify passes in real-time to ensure safe and authorized departures.</p>
+          </div>
+          <div className="card card-p" style={{ background: 'var(--bg-raised)' }}>
+            <div className="text-3xl mb-3">🛠️</div>
+            <h3 className="font-bold mb-2">Fast Maintenance</h3>
+            <p className="text-sm text-sec">Report room issues directly from your dashboard. Proctors are instantly notified to resolve water, electrical, or structural problems.</p>
+          </div>
+          <div className="card card-p" style={{ background: 'var(--bg-raised)' }}>
+            <div className="text-3xl mb-3">📋</div>
+            <h3 className="font-bold mb-2">Asset Accountability</h3>
+            <p className="text-sm text-sec">Every piece of university property is tracked. The system ensures no student can leave if there are unresolved damages to their room.</p>
+          </div>
         </div>
       </main>
     </div>

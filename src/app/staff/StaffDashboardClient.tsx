@@ -169,18 +169,27 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
       alert("Please specify which asset is missing to reject the clearance.");
       return;
     }
-    await fetch('/api/clearance', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-        id: auditModal.id, 
-        action, 
-        rejectionReason: action === 'REJECTED' ? 'Missing room assets detected during baseline audit.' : undefined,
-        missingAssetsStr: action === 'REJECTED' ? flaggedAsset : undefined 
-      }),
-    });
-    setAuditModal(null);
-    router.refresh();
+    try {
+      const res = await fetch('/api/clearance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id: auditModal.id, 
+          action, 
+          rejectionReason: action === 'REJECTED' ? 'Missing room assets detected during baseline audit.' : undefined,
+          missingAssetsStr: action === 'REJECTED' ? flaggedAsset : undefined 
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Error: ${data.error || data.message || 'Failed to update clearance.'}`);
+        return;
+      }
+      setAuditModal(null);
+      router.refresh();
+    } catch (e: any) {
+      alert(`Network error: ${e.message}`);
+    }
   };
 
   // ── Master Asset Registration Logic ──
@@ -408,12 +417,12 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
                         {t.status === 'OPEN' && (
                           <button 
                             className="btn btn-sm btn-ghost" style={{ color: 'var(--amber)' }}
-                            onClick={() => updateTicketStatus(t.id, 'IN_PROGRESS')} disabled={!activeShift || updatingTicket === t.id}
+                            onClick={() => updateTicketStatus(t.id, 'IN_PROGRESS')} disabled={updatingTicket === t.id}
                           >Mark In Progress</button>
                         )}
                         <button 
                           className="btn btn-sm btn-ghost" style={{ color: 'var(--green)' }}
-                          onClick={() => updateTicketStatus(t.id, 'RESOLVED')} disabled={!activeShift || updatingTicket === t.id}
+                          onClick={() => updateTicketStatus(t.id, 'RESOLVED')} disabled={updatingTicket === t.id}
                         >Resolve</button>
                       </div>
                     </div>
@@ -478,7 +487,7 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
                   <div key={c.id} className="card" style={{ padding: '16px', background: 'var(--bg-raised)' }}>
                     <div className="flex justify-between items-start mb-3">
                       <div>
-                        <div className="font-bold text-sm">{c.student.name}</div>
+                        <div className="font-bold text-sm">{c.student.name} <span className="text-xs text-blue-400 ml-2 font-mono bg-blue-900/20 px-2 py-0.5 rounded border border-blue-500/20">{c.student.studentId}</span></div>
                         <div className="text-xs font-mono text-muted mt-1">Room {c.student.room?.roomNumber}</div>
                       </div>
                       <span className="text-xs text-muted">{new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
@@ -487,7 +496,6 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
                     <button 
                       className="btn btn-sm btn-primary btn-block mt-2" 
                       onClick={() => openAuditModal(c)}
-                      disabled={!activeShift}
                     >
                       Perform Baseline Audit
                     </button>
@@ -533,8 +541,13 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
         <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)' }}>
           <div className="card card-p w-full max-w-md animate-in" style={{ border: '1px solid var(--border)' }}>
             <h2 className="mb-1">Room Baseline Audit</h2>
-            <p className="text-sec text-sm mb-6">Room {auditModal.student.room?.roomNumber} • {auditModal.student.name}</p>
+            <p className="text-sec text-sm mb-4">Room {auditModal.student.room?.roomNumber} • {auditModal.student.name}</p>
             
+            <div className="mb-6 p-3 rounded flex items-center justify-between" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.1) 0%, rgba(37,99,235,0.05) 100%)', border: '1px solid rgba(59,130,246,0.2)' }}>
+              <span className="text-xs text-blue-300"><strong>Security Check:</strong> Verify student's physical ID card matches:</span>
+              <span className="font-mono text-lg font-bold text-blue-400 bg-black/40 px-3 py-1 rounded shadow-inner border border-blue-500/30">{auditModal.student.studentId}</span>
+            </div>
+
             {loadingAssets ? (
               <p className="text-center py-8 text-sec"><span className="spinner"></span> Loading Room Data...</p>
             ) : (

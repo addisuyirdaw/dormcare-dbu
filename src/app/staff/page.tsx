@@ -26,13 +26,11 @@ export default async function StaffPage() {
       orderBy: { checkedInAt: 'desc' },
     }),
     prisma.emergencyTicket.findMany({
-      where: { dormBlockId: { in: managedBlockIds } },
       include: { student: { select: { name: true, studentId: true, room: { select: { roomNumber: true } } } }, dormBlock: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
       take: 50,
     }),
     prisma.gateClearanceRequest.findMany({
-      where: { student: { dormBlockId: { in: managedBlockIds } } },
       include: { student: { select: { name: true, studentId: true, room: { select: { roomNumber: true } } } }, approvedBy: { select: { name: true } } },
       orderBy: { createdAt: 'desc' },
       take: 50,
