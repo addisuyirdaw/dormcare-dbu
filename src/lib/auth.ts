@@ -1,7 +1,7 @@
 import NextAuth from 'next-auth';
 import Credentials from 'next-auth/providers/credentials';
 import { compareSync } from 'bcryptjs';
-import { prisma } from './db';
+import { resolveUniversityUser } from './university-auth';
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   secret: process.env.NEXTAUTH_SECRET,
@@ -13,19 +13,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     Credentials({
       name: 'credentials',
       credentials: {
-        email: { label: 'Email', type: 'email' },
+        identifier: { label: 'University ID', type: 'text' },
         password: { label: 'Password', type: 'password' },
       },
       async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) return null;
+        const identifier = credentials?.identifier as string | undefined;
+        const password = credentials?.password as string | undefined;
 
-        const user = await prisma.user.findUnique({
-          where: { email: credentials.email as string },
-          include: { dormBlock: true },
-        });
+        if (!identifier?.trim() || !password) return null;
 
+        const user = await resolveUniversityUser(identifier);
         if (!user) return null;
-        const valid = compareSync(credentials.password as string, user.password);
+
+        const valid = compareSync(password, user.password);
         if (!valid) return null;
 
         return {

@@ -292,21 +292,51 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
           )}
         </div>
 
-        {/* Asset Registration Portal */}
-        <div className="card card-p flex-col justify-center items-center text-center" style={{ gridColumn: 'span 2', background: 'var(--bg-raised)' }}>
-          <span style={{ fontSize: '3rem', marginBottom: '10px' }}>🏢</span>
-          <h3 className="mb-2">Campus-Wide Dormitory Asset Registration</h3>
-          <p className="text-sec text-sm mb-6 max-w-md">
-            Access the dedicated portal to dynamically register baselines, map blocks, and assign property inventory from scratch.
-          </p>
-          <button 
-            className="btn btn-primary btn-lg" 
-            onClick={() => router.push('/staff/registration')}
-          >
-            Launch Registration Portal →
-          </button>
+        {/* Quick Launch Cards */}
+        <div className="grid-2 gap-6" style={{ gridColumn: 'span 2' }}>
+
+          {/* Asset Registration Portal */}
+          <div className="card card-p flex-col justify-center items-center text-center" style={{ background: 'var(--bg-raised)' }}>
+            <span style={{ fontSize: '3rem', marginBottom: '10px' }}>🏢</span>
+            <h3 className="mb-2">Campus-Wide Dormitory Asset Registration</h3>
+            <p className="text-sec text-sm mb-6 max-w-md">
+              Access the dedicated portal to dynamically register baselines, map blocks, and assign property inventory from scratch.
+            </p>
+            <button 
+              className="btn btn-primary btn-lg" 
+              onClick={() => router.push('/staff/registration')}
+            >
+              Launch Registration Portal →
+            </button>
+          </div>
+
+          {/* Asset Inspector / QR Scanner */}
+          <div className="card card-p flex-col justify-center items-center text-center" style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.08) 0%, rgba(16,185,129,0.08) 100%)', border: '1px solid rgba(16,185,129,0.25)' }}>
+            <span style={{ fontSize: '3rem', marginBottom: '10px' }}>📷</span>
+            <h3 className="mb-2">Asset Inspector & Audit Scanner</h3>
+            <p className="text-sec text-sm mb-6 max-w-md">
+              Scan asset QR tags to verify, flag damaged or missing items, and lock student gate clearance in real time.
+            </p>
+            <div className="flex flex-col gap-3 w-full max-w-xs">
+              <button 
+                className="btn btn-lg w-full" 
+                style={{ background: 'var(--green)', color: '#000', fontWeight: 'bold' }}
+                onClick={() => router.push('/staff/scanner')}
+              >
+                🔍 Launch Asset Scanner →
+              </button>
+              <button
+                className="btn btn-ghost btn-sm border border-white/10 w-full"
+                onClick={() => router.push('/staff/print-tags')}
+              >
+                🖨️ Print Asset Tags
+              </button>
+            </div>
+          </div>
+
         </div>
       </div>
+
 
       <div className="grid-2 gap-6">
         {/* Emergency Tickets Queue */}

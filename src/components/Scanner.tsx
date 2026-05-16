@@ -30,6 +30,10 @@ export default function Scanner({ onScanSuccess }: { onScanSuccess: (data: strin
       
       html5QrcodeScanner.render(
         (decodedText: string) => {
+          // Fix html5-qrcode file upload bug where it passes stringified Event
+          if (!decodedText || typeof decodedText !== 'string' || decodedText.startsWith('[object')) {
+            return;
+          }
           html5QrcodeScanner.clear();
           processScan(decodedText, 'QR_SCAN');
         },

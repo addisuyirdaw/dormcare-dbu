@@ -41,5 +41,5 @@ function getDashboard(role: string | undefined) {
 }
 
 export const config = {
-  matcher: ['/((?!_next|public|favicon.ico|api/clearance/verify).*)'],
+  matcher: ['/((?!_next|public|favicon.ico|api/clearance/verify|api/assistant).*)'],
 };

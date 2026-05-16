@@ -9,6 +9,9 @@ async function main() {
   // Clear existing data (in correct order of foreign keys)
   await prisma.attendanceLog.deleteMany();
   await prisma.gateClearanceRequest.deleteMany();
+  await prisma.maintenanceTicket.deleteMany();
+  await prisma.issueReport.deleteMany();
+  await prisma.inventoryItem.deleteMany();
   await prisma.emergencyTicket.deleteMany();
   await prisma.shiftRegistry.deleteMany();
   await prisma.roomAsset.deleteMany();
@@ -65,17 +68,22 @@ async function main() {
   console.log(`✅ Created ${rooms.length} dorm rooms with baseline assets`);
 
   // ─── Create Demo Users ───
-  const hashedPassword = hashSync('password123', 10);
+  const defaultPassword = 'password123#';
+  const hashedPassword = hashSync(defaultPassword, 10);
 
   // Admin
-  const admin = await prisma.user.create({
+  await prisma.user.create({
     data: { name: 'Dr. Alemu Bekele', email: 'admin@dbu.edu.et', password: hashedPassword, role: 'ADMIN', phone: '+251911000001' },
+  });
+  await prisma.user.create({
+    data: { name: 'Proctor One', email: 'proctor1@dbu.edu.et', password: hashedPassword, role: 'ADMIN', phone: '+251911000099' },
   });
 
   // Staff (Multi-Block Assignment: 1 staff manages 3-4 blocks)
   const staffUsers = [];
   const staffNames = ['Ato Tadesse Worku', 'W/ro Meron Haile', 'Ato Girma Desta'];
   for (let i = 0; i < staffNames.length; i++) {
+    const staffId = `teregna150090${i + 1}`;
     // Assign 3 blocks to each staff member
     const assignedBlocks = blocks.slice(i * 3, i * 3 + 3).map(b => ({ id: b.id }));
     const primaryBlock = assignedBlocks[0]; // Office is in their first assigned block
@@ -84,7 +92,7 @@ async function main() {
       const staff = await prisma.user.create({
         data: {
           name: staffNames[i],
-          email: `staff${i + 1}@dbu.edu.et`,
+          email: `${staffId}@dbu.edu.et`,
           password: hashedPassword,
           role: 'STAFF',
           dormBlockId: primaryBlock.id, // Primary office for geofence
@@ -106,11 +114,12 @@ async function main() {
   
   for (let i = 0; i < studentNames.length; i++) {
     const room = rooms[i % rooms.length];
+    const portalId = `dbu150096${i + 1}`;
     const student = await prisma.user.create({
       data: {
         name: studentNames[i],
-        studentId: `DBU/${1000 + i}/15`,
-        email: `student${i + 1}@dbu.edu.et`,
+        studentId: portalId.toUpperCase(),
+        email: `${portalId}@dbu.edu.et`,
         password: hashedPassword,
         role: 'STUDENT',
         dormBlockId: room.dormBlockId,
@@ -161,10 +170,11 @@ async function main() {
   });
 
   console.log('\n🎉 Database seeded successfully!');
-  console.log('\n📧 Demo Login Credentials (password: password123):');
-  console.log('   Student: student1@dbu.edu.et (Nahom Tesfaye)');
-  console.log('   Staff:   staff1@dbu.edu.et (Ato Tadesse Worku - Multi-Block)');
-  console.log('   Admin:   admin@dbu.edu.et');
+  console.log(`\n📧 Demo Login (default password: ${defaultPassword}):`);
+  console.log('   Student: dbu1500962  (Nahom Tesfaye)');
+  console.log('   Staff:   teregna1500901  (Ato Tadesse Worku)');
+  console.log('   Admin:   admin@dbu.edu.et  or  proctor1');
+  console.log('   New users: Sign up with any password (min. 6 characters).');
 }
 
 main()

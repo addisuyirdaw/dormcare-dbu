@@ -1,10 +1,13 @@
 'use client';
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 
 const DEFAULT_ASSET_TYPES = ['CHAIR', 'LOCKER', 'TABLE', 'BED', 'KEY'];
 
 export default function RegistrationClient() {
+  const router = useRouter();
+  
   // Registration Form State
   const [blockNum, setBlockNum] = useState<string>('');
   const [roomNum, setRoomNum] = useState<string>('');
@@ -30,6 +33,8 @@ export default function RegistrationClient() {
   const [filterBlock, setFilterBlock] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [showWarningsOnly, setShowWarningsOnly] = useState(false);
+  const [backfilling, setBackfilling] = useState(false);
+  const [backfillMsg, setBackfillMsg] = useState('');
 
   const fetchLedgerRooms = async () => {
     try {
@@ -46,6 +51,26 @@ export default function RegistrationClient() {
   useEffect(() => {
     fetchLedgerRooms();
   }, []);
+
+  const handleBackfill = async () => {
+    setBackfilling(true);
+    setBackfillMsg('');
+    try {
+      const res = await fetch('/api/inventory/backfill', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        const created = data.results.filter((r: any) => r.status?.startsWith('CREATED'));
+        const skipped = data.results.filter((r: any) => r.status?.startsWith('SKIPPED'));
+        setBackfillMsg(`✅ Done! Generated assets for ${created.length} student(s). ${skipped.length} already had assets.`);
+        fetchLedgerRooms();
+      } else {
+        setBackfillMsg(`❌ Error: ${data.error}`);
+      }
+    } catch {
+      setBackfillMsg('❌ Network error during backfill.');
+    }
+    setBackfilling(false);
+  };
 
   const updateAsset = (index: number, quantity: string) => {
     const newAssets = [...assets];
@@ -127,10 +152,19 @@ export default function RegistrationClient() {
         }),
       });
       
+      const result = await res.json();
       if (!res.ok) {
-        const err = await res.json();
+        const err = result;
         alert(`Error: ${err.error}`);
         return;
+      }
+
+      // Show confirmation of which assets were auto-generated
+      if (result.assetsGenerated > 0) {
+        const tagList = result.assets.map((a: any) => `• ${a.item}: ${a.tag}`).join('\n');
+        alert(`✅ Student registered!\n\n🏷️ Auto-generated ${result.assetsGenerated} personal asset tags:\n${tagList}\n\nPrint these tags and attach them to the physical items in the room.`);
+      } else if (result.assetsGenerated === 0) {
+        alert(`⚠️ Student registered, but no new assets were generated (they may already exist or an error occurred). Check server logs.`);
       }
 
       // Clear input and refresh ledger
@@ -189,10 +223,24 @@ export default function RegistrationClient() {
       {/* HEADER */}
       <div className="mb-6">
         <Link href="/staff" className="btn btn-ghost btn-sm mb-4 border border-white/10">← Back to Dashboard</Link>
-        <h1>🏢 Campus-Wide Dormitory Asset Registration</h1>
-        <p className="text-sec mt-2">
-          Dynamically register room baselines. If a block or room does not exist, it will be automatically created on the fly.
-        </p>
+        <div className="flex items-start justify-between gap-4 flex-wrap">
+          <div>
+            <h1>🏢 Campus-Wide Dormitory Asset Registration</h1>
+            <p className="text-sec mt-2">
+              Dynamically register room baselines. If a block or room does not exist, it will be automatically created on the fly.
+            </p>
+          </div>
+          <div className="flex flex-col items-end gap-2">
+            <button
+              onClick={handleBackfill}
+              disabled={backfilling}
+              className="btn btn-sm border border-amber-500/50 text-amber-400 hover:bg-amber-500/10 transition-colors"
+            >
+              {backfilling ? '⏳ Generating...' : '🔧 Generate Missing Assets'}
+            </button>
+            {backfillMsg && <p className="text-xs text-right max-w-[260px]" style={{ color: backfillMsg.startsWith('✅') ? 'var(--green)' : 'var(--red)' }}>{backfillMsg}</p>}
+          </div>
+        </div>
       </div>
 
       {/* REGISTRATION PANEL */}
@@ -205,6 +253,7 @@ export default function RegistrationClient() {
             <label className="text-xs text-sec uppercase tracking-wider mb-2 block font-bold">Block Number</label>
             <input 
               type="number"
+              min="0"
               className="form-input w-full bg-black/40 text-lg py-3 px-4 font-mono border border-white/10"
               placeholder="e.g. 7"
               value={blockNum}
@@ -215,6 +264,7 @@ export default function RegistrationClient() {
             <label className="text-xs text-sec uppercase tracking-wider mb-2 block font-bold">Dorm Room</label>
             <input 
               type="number"
+              min="0"
               className="form-input w-full bg-black/40 text-lg py-3 px-4 font-mono border border-white/10"
               placeholder="e.g. 100"
               value={roomNum}
@@ -421,7 +471,19 @@ export default function RegistrationClient() {
                                                     </div>
                                                     <div className="text-xs font-mono text-sec">{student.studentId}</div>
                                                   </div>
-                                                  {isCustodian && <span className="badge bg-primary/20 text-primary border-none text-[10px]">Key Custodian</span>}
+                                                  <div className="flex items-center gap-2">
+                                                    {isCustodian && <span className="badge bg-primary/20 text-primary border-none text-[10px]">Key Custodian</span>}
+                                                    <button
+                                                      onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        router.push(`/staff/print-tags?studentId=${student.studentId}&roomNumber=${encodeURIComponent(room.roomNumber)}`);
+                                                      }}
+                                                      className="btn btn-xs bg-blue-600 hover:bg-blue-500 text-white border-none px-2 py-1 rounded shadow-sm"
+                                                      title="Print tags for this student"
+                                                    >
+                                                      🖨️ Print
+                                                    </button>
+                                                  </div>
                                                 </div>
                                               );
                                             })
@@ -479,7 +541,16 @@ export default function RegistrationClient() {
                                           ))}
                                         </div>
                                         
-                                        <div className="mt-4 flex justify-end">
+                                        <div className="mt-4 flex justify-end gap-2">
+                                          <button 
+                                            className="btn btn-sm btn-ghost border border-white/10 hover:bg-blue-600 hover:text-white transition-colors"
+                                            onClick={(e) => {
+                                              e.stopPropagation();
+                                              router.push(`/staff/print-tags?roomNumber=${room.roomNumber}`);
+                                            }}
+                                          >
+                                            🖨️ Print Room Tags
+                                          </button>
                                           <button 
                                             className="btn btn-sm btn-ghost border border-white/10 hover:bg-primary hover:text-black transition-colors"
                                             onClick={(e) => {

@@ -42,7 +42,7 @@ export default async function StudentPage() {
   const isKeyCustodian = dbUser?.keyCustodianFor !== null;
 
   return (
-    <div className="page">
+    <div className="page relative">
       <Navbar userName={dbUser?.name} role="STUDENT" dormBlock={dbUser?.dormBlock?.name} />
       <StudentDashboardClient
         user={{ ...user, dormBlock: dbUser?.dormBlock, room: dbUser?.room, isKeyCustodian }}

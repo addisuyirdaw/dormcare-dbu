@@ -1,5 +1,5 @@
 'use client';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 
 const CATEGORY_CONFIG = {
@@ -23,6 +23,22 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
   const [ticketSuccess, setTicketSuccess] = useState(false);
   const [clearanceSuccess, setClearanceSuccess] = useState<any>(null);
   const [error, setError] = useState('');
+  const [myAssets, setMyAssets] = useState<any[]>([]);
+  const [loadingAssets, setLoadingAssets] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/inventory/my-assets')
+      .then(r => r.json())
+      .then(d => { if (d.items) setMyAssets(d.items); })
+      .catch(() => {})
+      .finally(() => setLoadingAssets(false));
+  }, []);
+
+  const CONDITION_BADGE: Record<string, { cls: string; label: string }> = {
+    GOOD:    { cls: 'badge-green',  label: '✅ Good' },
+    DAMAGED: { cls: 'badge-red',    label: '🔴 Damaged' },
+    MISSING: { cls: 'badge-amber',  label: '⚠️ Missing' },
+  };
 
   // ── Emergency Ticket Submit ──
   const handleTicketSubmit = async () => {
@@ -34,10 +50,15 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ category: ticketCategory, description: ticketDesc }),
       });
-      if (!res.ok) throw new Error('Failed');
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || 'Failed to submit ticket. Please try again.');
+      }
       setTicketSuccess(true);
       setTimeout(() => { setTicketSuccess(false); setView('home'); router.refresh(); }, 2500);
-    } catch { setError('Failed to submit ticket. Please try again.'); }
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to submit ticket. Please try again.');
+    }
     setSubmitting(false);
   };
 
@@ -50,9 +71,15 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
         headers: { 'Content-Type': 'application/json' },
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed');
+      if (!res.ok) {
+        let msg = data.error || data.message || 'Failed to request clearance.';
+        if (data.details && typeof data.details === 'string') msg += ` (${data.details})`;
+        throw new Error(msg);
+      }
       setClearanceSuccess(data);
-    } catch (err: any) { setError(err.message || 'Failed to request clearance.'); }
+    } catch (err: any) { 
+      setError(err.message || 'Failed to request clearance.'); 
+    }
     setSubmitting(false);
   };
 
@@ -143,6 +170,44 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
             )}
             <p className="text-[10px] text-muted leading-tight border-t border-white/10 pt-3">
               This inventory was verified and registered by your assigned Proctor. You and your roommates are held accountable for these items during final clearance.
+            </p>
+          </div>
+        </div>
+
+        {/* My Personal Assets (Granular) */}
+        <div className="card" style={{ gridColumn: 'span 1' }}>
+          <div className="card-header">
+            <h3>🏷️ My Personal Assets</h3>
+            <p className="text-xs text-sec mt-1">Items locked to your student ID</p>
+          </div>
+          <div className="card-p">
+            {loadingAssets ? (
+              <div className="text-sec text-sm animate-pulse">Loading your assigned items...</div>
+            ) : myAssets.length === 0 ? (
+              <div className="alert alert-warn p-3 text-xs">
+                No personal assets assigned yet. Contact your Proctor.
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                {myAssets.map((item: any) => {
+                  const badge = CONDITION_BADGE[item.condition] || { cls: 'badge-primary', label: item.condition };
+                  return (
+                    <div key={item.id} className="bg-black/30 border border-white/10 rounded-lg p-3">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="font-bold text-sm">{item.itemName}</span>
+                        <span className={`badge ${badge.cls} text-[10px]`}>{badge.label}</span>
+                      </div>
+                      <div className="font-mono text-[11px] text-muted bg-black/40 px-2 py-1 rounded tracking-wider">
+                        {item.assetTag}
+                      </div>
+                      <p className="text-[10px] text-muted mt-1">Look for this tag sticker on your physical item.</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <p className="text-[10px] text-muted leading-tight border-t border-white/10 pt-3 mt-3">
+              These items are physically tagged with the ID sticker shown above. You are personally accountable for them at checkout.
             </p>
           </div>
         </div>
@@ -285,7 +350,7 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
           <p className="text-sec mb-6">Staff have been notified to perform a baseline asset audit on Room {user?.room?.roomNumber}. Check back later for your digital exit token.</p>
           <div className="token-display" style={{ background: 'var(--bg-raised)', borderColor: 'var(--border)' }}>
             <p className="text-sm text-sec mb-2">Request ID</p>
-            <div className="font-mono text-xl text-muted">{clearanceSuccess.id.substring(0, 8).toUpperCase()}</div>
+            <div className="font-mono text-xl text-muted">{(clearanceSuccess.clearanceRecord?.id || clearanceSuccess.id || 'Pending').substring(0, 8).toUpperCase()}</div>
           </div>
           <button className="btn btn-ghost btn-block mt-6" onClick={() => setView('home')}>Back to Dashboard</button>
         </div>

@@ -49,7 +49,11 @@ export async function GET(req: NextRequest) {
 // POST /api/clearance — create new request (with Monash Property Audit)
 export async function POST(req: NextRequest) {
   try {
-    const { studentId } = await req.json();
+    const session = await auth();
+    if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    
+    const user = session.user as any;
+    const studentId = user.id;
 
     if (!studentId) {
       return NextResponse.json({ error: 'studentId is required.' }, { status: 400 });
@@ -116,13 +120,13 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. SUCCESS LOGIC: Clean state, generate secure DBU token
-    const secureToken = `DBU-${crypto.randomUUID().split('-')[0].toUpperCase()}`;
+    const secureToken = `DBU-${uuidv4().split('-')[0].toUpperCase()}`;
 
     const approvedRequest = await prisma.gateClearanceRequest.create({
       data: {
         studentId,
         status: 'APPROVED',
-        token: secureToken,
+        verificationToken: secureToken,
       }
     });
 
@@ -133,9 +137,13 @@ export async function POST(req: NextRequest) {
       clearanceRecord: approvedRequest
     }, { status: 200 });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('[CLEARANCE_POST_ERROR]', error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ 
+      error: 'Internal Server Error', 
+      details: error.message,
+      stack: error.stack 
+    }, { status: 500 });
   }
 }
 

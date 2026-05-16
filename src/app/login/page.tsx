@@ -1,111 +1,191 @@
 'use client';
-import { useState } from 'react';
-import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/navigation';
 
-const ROLE_CREDENTIALS: Record<string, { email: string; label: string; icon: string }> = {
-  STUDENT: { email: 'student1@dbu.edu.et', label: 'Student', icon: '🎓' },
-  STAFF:   { email: 'staff1@dbu.edu.et',   label: 'Staff (Teregna)', icon: '🛡️' },
-  ADMIN:   { email: 'admin@dbu.edu.et',    label: 'Admin (Proctor)', icon: '👁️' },
-};
+import { useState } from 'react';
+import { getSession, signIn } from 'next-auth/react';
+
+type AuthMode = 'login' | 'signup';
+
+function redirectForRole(role: string | undefined) {
+  if (role === 'STAFF') {
+    window.location.href = '/staff';
+    return;
+  }
+  if (role === 'ADMIN') {
+    window.location.href = '/admin';
+    return;
+  }
+  window.location.href = '/student';
+}
 
 export default function LoginPage() {
-  const router = useRouter();
-  const [role, setRole] = useState<'STUDENT' | 'STAFF' | 'ADMIN'>('STUDENT');
-  const [email, setEmail] = useState('student1@dbu.edu.et');
-  const [password, setPassword] = useState('password123');
+  const [mode, setMode] = useState<AuthMode>('login');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
 
-  const handleRoleChange = (r: 'STUDENT' | 'STAFF' | 'ADMIN') => {
-    setRole(r);
-    setEmail(ROLE_CREDENTIALS[r].email);
+  const switchMode = (next: AuthMode) => {
+    setMode(next);
     setError('');
+    setSuccess('');
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError('');
-    const res = await signIn('credentials', { email, password, redirect: false });
+    setSuccess('');
+
+    const res = await signIn('credentials', {
+      identifier: identifier.trim(),
+      password,
+      redirect: false,
+    });
+
     setLoading(false);
+
     if (res?.error) {
-      setError('Invalid credentials. Please try again.');
-    } else {
-      router.push(role === 'STUDENT' ? '/student' : role === 'STAFF' ? '/staff' : '/admin');
-      router.refresh();
+      setError(
+        'Unable to sign in. Verify your university ID and password, or register below if this is your first visit.',
+      );
+      return;
     }
+
+    const session = await getSession();
+    const role = (session?.user as { role?: string })?.role;
+    redirectForRole(role);
+  };
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    const res = await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: identifier.trim(), password }),
+    });
+
+    const data = await res.json();
+    setLoading(false);
+
+    if (!res.ok) {
+      setError(data.error || 'Registration could not be completed.');
+      return;
+    }
+
+    setSuccess('Account created. Signing you in…');
+
+    const signInRes = await signIn('credentials', {
+      identifier: identifier.trim(),
+      password,
+      redirect: false,
+    });
+
+    if (signInRes?.error) {
+      setSuccess('');
+      setError('Account created. Please sign in with the same ID and password.');
+      setMode('login');
+      return;
+    }
+
+    redirectForRole(data.role);
   };
 
   return (
     <div className="login-bg">
       <div className="login-card">
         <div className="login-logo">🏛️</div>
+
         <div className="text-center mb-6">
-          <h1 style={{ fontSize: '1.4rem', marginBottom: 4 }}>DBU Dormitory System</h1>
-          <p className="text-sm text-sec">Debre Birhan University</p>
+          <p className="text-xs text-muted" style={{ letterSpacing: '0.12em', textTransform: 'uppercase' }}>
+            Debre Birhan University
+          </p>
+          <h1 style={{ fontSize: '1.75rem', marginTop: 8, marginBottom: 4 }}>
+            {mode === 'login' ? 'Login' : 'Sign Up'}
+          </h1>
+          <p className="text-sm text-sec">Dormitory Operations Portal</p>
         </div>
 
-        {/* Role Tabs */}
-        <div className="role-tabs">
-          {(['STUDENT', 'STAFF', 'ADMIN'] as const).map((r) => (
-            <button
-              key={r}
-              className={`role-tab ${role === r ? 'active' : ''}`}
-              onClick={() => handleRoleChange(r)}
-              type="button"
-            >
-              {ROLE_CREDENTIALS[r].icon} {ROLE_CREDENTIALS[r].label}
-            </button>
-          ))}
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <form onSubmit={mode === 'login' ? handleLogin : handleSignUp} className="flex flex-col gap-4">
           <div className="form-group">
-            <label className="form-label">Email Address</label>
+            <label className="form-label" htmlFor="identifier">
+              University ID
+            </label>
             <input
-              id="email"
-              type="email"
+              id="identifier"
+              type="text"
               className="form-input"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              autoComplete="username"
+              placeholder={mode === 'login' ? 'e.g. dbu1500962, teregna1500901' : 'e.g. dbu1500963, teregna1500999'}
+              value={identifier}
+              onChange={(e) => setIdentifier(e.target.value)}
               required
-              autoComplete="email"
             />
           </div>
+
           <div className="form-group">
-            <label className="form-label">Password</label>
+            <label className="form-label" htmlFor="password">
+              Password
+            </label>
             <input
               id="password"
               type="password"
               className="form-input"
+              autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+              placeholder={mode === 'login' ? 'Password' : 'Choose your password (min. 6 characters)'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
-              autoComplete="current-password"
+              minLength={mode === 'signup' ? 6 : 1}
             />
           </div>
 
           {error && <div className="alert alert-error">{error}</div>}
 
+          {success && <div className="alert alert-success">{success}</div>}
+
           <button
-            id="login-btn"
             type="submit"
             className="btn btn-primary btn-block"
-            disabled={loading}
+            disabled={loading || !identifier.trim() || !password}
             style={{ marginTop: 4 }}
           >
             {loading ? <span className="spinner" /> : null}
-            {loading ? 'Signing in…' : `Sign in as ${ROLE_CREDENTIALS[role].label}`}
+            {loading ? ' Please wait…' : mode === 'login' ? 'Login' : 'Create Account'}
           </button>
         </form>
 
-        <div className="divider mt-6" />
-        <div className="text-center">
-          <p className="text-xs text-muted">
-            Demo password: <span className="font-mono text-sec">password123</span>
-          </p>
-        </div>
+        <p className="text-center text-sm text-sec mt-6">
+          {mode === 'login' ? (
+            <>
+              No account?{' '}
+              <button
+                type="button"
+                onClick={() => switchMode('signup')}
+                className="btn btn-ghost"
+                style={{ padding: 0, fontSize: 'inherit', color: 'var(--accent-light)' }}
+              >
+                Sign up
+              </button>
+            </>
+          ) : (
+            <>
+              Already registered?{' '}
+              <button
+                type="button"
+                onClick={() => switchMode('login')}
+                className="btn btn-ghost"
+                style={{ padding: 0, fontSize: 'inherit', color: 'var(--accent-light)' }}
+              >
+                Login
+              </button>
+            </>
+          )}
+        </p>
       </div>
     </div>
   );

@@ -62,6 +62,14 @@ export async function POST(
   let keyCustodianId = null;
   if (custodianStudentId && custodianStudentId.trim() !== '') {
     const cleanStudentId = custodianStudentId.trim().toUpperCase();
+
+    // Enforce DBU ID Format: 'DBU' + exactly 7 digits (e.g., DBU1500962)
+    if (!/^DBU\d{7}$/.test(cleanStudentId)) {
+      return NextResponse.json({ 
+        error: 'Invalid Student ID format. It must start with "DBU" followed by exactly 7 numeric digits (e.g., DBU1500962).' 
+      }, { status: 400 });
+    }
+
     const cleanStudentName = custodianStudentName ? custodianStudentName.trim() : `Student ${cleanStudentId}`;
     
     let student = await prisma.user.findFirst({
