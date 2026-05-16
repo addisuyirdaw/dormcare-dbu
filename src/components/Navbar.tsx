@@ -22,7 +22,7 @@ export default function Navbar({ userName, role = 'STUDENT', dormBlock, onDuty }
 
   return (
     <nav style={{ position: 'sticky', top: 0, zIndex: 50, width: '100%' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', height: '80px', padding: '0 24px', backgroundColor: '#ffffff', borderBottom: '1px solid #f1f5f9', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '24px', width: '100%', height: '80px', padding: '0 24px', backgroundColor: '#ffffff', borderBottom: '1px solid #f1f5f9', boxShadow: '0 1px 2px 0 rgba(0, 0, 0, 0.05)' }}>
 
         {/* Brand (Left) */}
         <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: '12px', textDecoration: 'none', color: '#0f172a' }}>
@@ -35,15 +35,17 @@ export default function Navbar({ userName, role = 'STUDENT', dormBlock, onDuty }
         </Link>
 
         {/* Desktop Navigation & Auth */}
-        <div className="hidden-mobile" style={{ display: 'flex', alignItems: 'center', gap: '32px', marginLeft: 'auto' }}>
+        <div className="hidden-mobile" style={{ display: 'flex', alignItems: 'center', gap: '20px', marginLeft: 'auto', flexShrink: 0 }}>
           {/* Unauthenticated Links */}
           {!userName ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
-              <Link href="/" style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '0.025em', color: '#334155', textTransform: 'uppercase', textDecoration: 'none' }}>Home</Link>
-              <Link href="/about" style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '0.025em', color: '#334155', textTransform: 'uppercase', textDecoration: 'none' }}>About</Link>
-              <Link href="/contact" style={{ fontSize: '14px', fontWeight: 600, letterSpacing: '0.025em', color: '#334155', textTransform: 'uppercase', textDecoration: 'none' }}>Contact</Link>
-              <a href="https://www.dbu.edu.et" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '14px', fontWeight: 700, letterSpacing: '0.025em', color: '#4f46e5', textTransform: 'uppercase', textDecoration: 'none', backgroundColor: '#e0e7ff', padding: '6px 12px', borderRadius: '6px', border: '1px solid #c7d2fe' }}>🌐 Main DBU Portal</a>
-            </div>
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', background: '#f1f5f9', padding: '6px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
+                <Link href="/" className="nav-pill" style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 800, letterSpacing: '0.05em', color: '#475569', textTransform: 'uppercase', textDecoration: 'none', borderRadius: '8px', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Home</Link>
+                <Link href="/about" className="nav-pill" style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 800, letterSpacing: '0.05em', color: '#475569', textTransform: 'uppercase', textDecoration: 'none', borderRadius: '8px', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>About</Link>
+                <Link href="/contact" className="nav-pill" style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 800, letterSpacing: '0.05em', color: '#475569', textTransform: 'uppercase', textDecoration: 'none', borderRadius: '8px', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Contact</Link>
+              </div>
+              <a href="https://www.dbu.edu.et" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 800, letterSpacing: '0.05em', color: '#4f46e5', textTransform: 'uppercase', textDecoration: 'none', backgroundColor: '#e0e7ff', padding: '10px 16px', borderRadius: '10px', whiteSpace: 'nowrap', transition: 'all 0.2s' }} className="portal-btn">🌐 DBU Portal</a>
+            </>
           ) : (role === 'STAFF' || role === 'ADMIN') ? (
             /* Staff/Admin Dropdown */
             <details style={{ position: 'relative' }}>
@@ -58,26 +60,26 @@ export default function Navbar({ userName, role = 'STUDENT', dormBlock, onDuty }
           ) : null}
 
           {/* Auth Section */}
-          <div style={{ display: 'flex', alignItems: 'center', marginLeft: '16px', paddingLeft: '32px', borderLeft: '1px solid #e2e8f0' }}>
+          <div style={{ display: 'flex', alignItems: 'center', marginLeft: '16px', paddingLeft: '16px', borderLeft: '1px solid #e2e8f0' }}>
             {userName ? (
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                 {dormBlock && <span style={{ display: 'none' }} data-block={dormBlock} />}
                 {role === 'STAFF' && onDuty !== undefined && (
-                  <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: onDuty ? '#dcfce7' : '#fee2e2', color: onDuty ? '#166534' : '#991b1b' }}>
+                  <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', backgroundColor: onDuty ? '#dcfce7' : '#fee2e2', color: onDuty ? '#166534' : '#991b1b', whiteSpace: 'nowrap' }}>
                     <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: onDuty ? '#22c55e' : '#ef4444' }} />
                     {onDuty ? 'On Duty' : 'Off Duty'}
                   </span>
                 )}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: roleInfo.color + '20', color: roleInfo.color }}>{roleInfo.label}</span>
+                  <span style={{ padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 700, backgroundColor: roleInfo.color + '20', color: roleInfo.color, whiteSpace: 'nowrap' }}>{roleInfo.label}</span>
                   <span style={{ fontSize: '14px', fontWeight: 600, color: '#1e293b', maxWidth: '120px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{userName}</span>
                 </div>
-                <button style={{ padding: '8px 16px', fontSize: '14px', fontWeight: 700, color: '#475569', backgroundColor: 'transparent', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.025em' }} onClick={() => signOut({ callbackUrl: '/login' })}>
+                <button style={{ padding: '8px 16px', fontSize: '14px', fontWeight: 700, color: '#475569', backgroundColor: 'transparent', border: '1px solid #cbd5e1', borderRadius: '4px', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.025em', whiteSpace: 'nowrap', flexShrink: 0 }} onClick={() => signOut({ callbackUrl: '/login' })}>
                   Sign Out
                 </button>
               </div>
             ) : (
-              <a href="/login" style={{ padding: '8px 24px', backgroundColor: '#2563eb', color: '#ffffff', fontSize: '14px', fontWeight: 700, borderRadius: '4px', textDecoration: 'none', textTransform: 'uppercase', letterSpacing: '0.025em', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+              <a href="/login" style={{ padding: '8px 24px', backgroundColor: '#2563eb', color: '#ffffff', fontSize: '14px', fontWeight: 700, borderRadius: '4px', textDecoration: 'none', textTransform: 'uppercase', letterSpacing: '0.025em', boxShadow: '0 1px 2px rgba(0,0,0,0.05)', whiteSpace: 'nowrap', flexShrink: 0 }}>
                 Login
               </a>
             )}
@@ -138,8 +140,16 @@ export default function Navbar({ userName, role = 'STUDENT', dormBlock, onDuty }
         </div>
       )}
 
-      {/* CSS for Responsiveness */}
+      {/* CSS for Responsiveness and Premium UI */}
       <style>{`
+        .nav-pill:hover {
+          background-color: #ffffff;
+          color: #0f172a !important;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .portal-btn:hover {
+          background-color: #c7d2fe !important;
+        }
         @media (max-width: 868px) {
           .hidden-mobile { display: none !important; }
         }

@@ -377,8 +377,20 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    if (lowerMsg.includes("update") || lowerMsg.includes("announce") || lowerMsg.includes("new") || lowerMsg.includes("latest")) {
+      return NextResponse.json({
+        response: `📢 **System Announcement (v2.0)**:\n\nWelcome to the latest version of DBU DormCare! We've just rolled out **Digital Gate Pass Clearances** and **Automated Asset Auditing**. Proctors now have enhanced GPS verification for their shifts. \n\nIf you experience any issues with the new layout, please report it directly through this chat.`,
+      });
+    }
+
+    if (lowerMsg.includes("duty") || lowerMsg.includes("proctor") || lowerMsg.includes("who is") || lowerMsg.includes("person") || lowerMsg.includes("supervisor") || lowerMsg.includes("technician")) {
+      return NextResponse.json({
+        response: `👷 **On-Duty Personnel for Block ${blockId}**:\n\n- **Supervisor:** ${contacts.supervisor} (Phone: \`${contacts.phone}\`)\n- **Maintenance Technician:** ${contacts.tech}\n\nThey are currently monitoring the system and will be instantly notified if you report an emergency.`,
+      });
+    }
+
     return NextResponse.json({
-      response: `👋 Hello ${student.name}! Access Verified for Block ${blockId}, Room ${roomNumber}. I can pull your roommate rosters, check your gate clearance, route infrastructure faults to Admin, or run **DormCare AI analytics**. What can I do for you today?`,
+      response: `👋 Hello ${student.name}! Access Verified for Block ${blockId}, Room ${roomNumber}. I can pull your roommate rosters, check your gate clearance, route infrastructure faults to Admin, tell you who is on **duty**, or run **DormCare AI analytics**. What can I do for you today?`,
     });
   } catch (error: unknown) {
     console.error("AI Assistant Error:", error);

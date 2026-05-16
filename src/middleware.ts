@@ -7,7 +7,11 @@ export default auth((req) => {
   const isLoggedIn = !!session;
   const role = (session?.user as any)?.role;
 
-  if (pathname === '/login' || pathname === '/gate' || pathname.startsWith('/api/auth')) {
+  // Add all public paths here
+  const publicPaths = ['/login', '/gate', '/', '/about', '/contact'];
+  const isPublicPath = publicPaths.includes(pathname) || pathname.startsWith('/api/auth');
+
+  if (isPublicPath) {
     if (isLoggedIn && pathname === '/login') {
       return NextResponse.redirect(new URL(getDashboard(role), req.nextUrl));
     }
