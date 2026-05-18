@@ -41,24 +41,14 @@ export async function resolveUniversityUser(identifier: string) {
   });
   if (byAccount) return byAccount;
 
-  // Legacy demo aliases (pre-seeded accounts)
-  const studentNum = lower.match(/^student(\d+)$/)?.[1];
-  if (studentNum) {
-    return prisma.user.findUnique({
-      where: { email: `student${studentNum}@dbu.edu.et` },
+  if (lower === 'staff1') {
+    return prisma.user.findFirst({
+      where: { email: 'staff1@dbu.edu.et' },
       include: STUDENT_INCLUDE,
     });
   }
 
-  const staffNum = lower.match(/^staff(\d+)$/)?.[1];
-  if (staffNum) {
-    return prisma.user.findUnique({
-      where: { email: `staff${staffNum}@dbu.edu.et` },
-      include: STUDENT_INCLUDE,
-    });
-  }
-
-  if (lower === 'admin' || lower === 'proctor') {
+  if (lower === 'staff2' || lower === 'admin') {
     return prisma.user.findFirst({
       where: { role: 'ADMIN' },
       include: STUDENT_INCLUDE,

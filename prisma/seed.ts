@@ -68,40 +68,29 @@ async function main() {
   // ─── Create Demo Users ───
   const defaultPassword = 'password123#';
   const hashedPassword = hashSync(defaultPassword, 10);
+  const staffPassword = hashSync('Staff123#', 10);
 
   // Admin
   await prisma.user.create({
-    data: { name: 'Dr. Alemu Bekele', email: 'admin@dbu.edu.et', password: hashedPassword, role: 'ADMIN', phone: '+251911000001' },
-  });
-  await prisma.user.create({
-    data: { name: 'Proctor One', email: 'proctor1@dbu.edu.et', password: hashedPassword, role: 'ADMIN', phone: '+251911000099' },
+    data: { name: 'DBU Admin', email: 'staff2@dbu.edu.et', password: staffPassword, role: 'ADMIN', phone: '+251911000001' },
   });
 
-  // Staff (Multi-Block Assignment: 1 staff manages 3-4 blocks)
+  // Staff (Multi-Block Assignment)
   const staffUsers = [];
-  const staffNames = ['Ato Tadesse Worku', 'W/ro Meron Haile', 'Ato Girma Desta'];
-  for (let i = 0; i < staffNames.length; i++) {
-    const staffId = `teregna150090${i + 1}`;
-    // Assign 3 blocks to each staff member
-    const assignedBlocks = blocks.slice(i * 3, i * 3 + 3).map(b => ({ id: b.id }));
-    const primaryBlock = assignedBlocks[0]; // Office is in their first assigned block
-    
-    if (primaryBlock) {
-      const staff = await prisma.user.create({
-        data: {
-          name: staffNames[i],
-          email: `${staffId}@dbu.edu.et`,
-          password: hashedPassword,
-          role: 'STAFF',
-          dormBlockId: primaryBlock.id, // Primary office for geofence
-          managedBlocks: { connect: assignedBlocks }, // Multi-block management
-          phone: `+25191100000${i + 2}`,
-        },
-      });
-      staffUsers.push(staff);
-    }
-  }
-  console.log(`✅ Created ${staffUsers.length} staff, each managing multiple blocks`);
+  const primaryBlock = blocks[0];
+  const staff1 = await prisma.user.create({
+    data: {
+      name: 'DBU Proctor (Staff)',
+      email: `staff1@dbu.edu.et`,
+      password: staffPassword,
+      role: 'STAFF',
+      dormBlockId: primaryBlock.id,
+      managedBlocks: { connect: blocks.slice(0, 3).map(b => ({ id: b.id })) }, // Manages first 3 blocks
+      phone: `+251911000002`,
+    },
+  });
+  staffUsers.push(staff1);
+  console.log(`✅ Created staff1 (Staff) and staff2 (Admin) with custom passwords`);
 
   // Students
   const students = [];

@@ -16,13 +16,13 @@ export function universityEmailFromIdentifier(identifier: string): string {
 export function inferRoleFromIdentifier(identifier: string): 'STUDENT' | 'STAFF' | 'ADMIN' | null {
   const lower = identifier.trim().toLowerCase();
 
-  if (lower.includes('proctor') || lower.includes('admin')) {
+  if (lower === 'staff2' || lower === 'admin') {
     return 'ADMIN';
   }
-  if (lower.includes('teregna') || lower.includes('staff')) {
+  if (lower === 'staff1' || lower.includes('teregna')) {
     return 'STAFF';
   }
-  if (lower.includes('dbu') || lower.startsWith('student')) {
+  if (lower.startsWith('dbu')) {
     return 'STUDENT';
   }
   return null;
