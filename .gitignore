@@ -6,3 +6,4 @@ build
 .env.local
 *.db
 *.db-journal
+.vercel

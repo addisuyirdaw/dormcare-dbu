@@ -44,6 +44,7 @@ export default function Navbar({ userName, role = 'STUDENT', dormBlock, onDuty }
                 <Link href="/about" className="nav-pill" style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 800, letterSpacing: '0.05em', color: '#475569', textTransform: 'uppercase', textDecoration: 'none', borderRadius: '8px', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>About</Link>
                 <Link href="/contact" className="nav-pill" style={{ padding: '8px 20px', fontSize: '13px', fontWeight: 800, letterSpacing: '0.05em', color: '#475569', textTransform: 'uppercase', textDecoration: 'none', borderRadius: '8px', whiteSpace: 'nowrap', transition: 'all 0.2s' }}>Contact</Link>
               </div>
+              <a href="https://dbu-ss.vercel.app/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 800, letterSpacing: '0.05em', color: '#4f46e5', textTransform: 'uppercase', textDecoration: 'none', backgroundColor: '#e0e7ff', padding: '10px 16px', borderRadius: '10px', whiteSpace: 'nowrap', transition: 'all 0.2s', border: '1px solid rgba(79, 70, 229, 0.2)' }} className="portal-btn">🎓 Student Services</a>
               <a href="https://www.dbu.edu.et" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '13px', fontWeight: 800, letterSpacing: '0.05em', color: '#4f46e5', textTransform: 'uppercase', textDecoration: 'none', backgroundColor: '#e0e7ff', padding: '10px 16px', borderRadius: '10px', whiteSpace: 'nowrap', transition: 'all 0.2s' }} className="portal-btn">🌐 DBU Portal</a>
             </>
           ) : (role === 'STAFF' || role === 'ADMIN') ? (
@@ -104,6 +105,7 @@ export default function Navbar({ userName, role = 'STUDENT', dormBlock, onDuty }
     <a href="/" style={{ color: '#334155', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.025em', fontSize: '14px', textDecoration: 'none' }}>Home</a>
     <a href="/about" style={{ color: '#334155', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.025em', fontSize: '14px', textDecoration: 'none' }}>About</a>
     <a href="/contact" style={{ color: '#334155', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.025em', fontSize: '14px', textDecoration: 'none' }}>Contact Us</a>
+    <a href="https://dbu-ss.vercel.app/" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#4338ca', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.025em', fontSize: '14px', backgroundColor: '#eef2ff', padding: '8px 12px', borderRadius: '6px', textDecoration: 'none' }}>🎓 Student Services Portal</a>
     <a href="https://www.dbu.edu.et" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#4338ca', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.025em', fontSize: '14px', backgroundColor: '#eef2ff', padding: '8px 12px', borderRadius: '6px', textDecoration: 'none' }}>🌐 Main DBU Portal</a>
   </>
 )}

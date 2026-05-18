@@ -14,7 +14,6 @@ export async function GET(
     include: {
       student: { select: { name: true, studentId: true, dormBlock: { select: { name: true, number: true } } } },
       approvedBy: { select: { name: true } },
-      items: true,
     },
   });
 
@@ -26,12 +25,19 @@ export async function GET(
     return NextResponse.json({ valid: false, error: 'Token expired', expiredAt: request.tokenExpiresAt });
   }
 
+  let items = null;
+  try {
+    items = request.personalItems ? JSON.parse(request.personalItems) : null;
+  } catch {
+    items = request.personalItems;
+  }
+
   return NextResponse.json({
     valid: true,
     student: request.student,
     approvedBy: request.approvedBy,
     approvedAt: request.approvedAt,
     tokenExpiresAt: request.tokenExpiresAt,
-    items: request.items,
+    items,
   });
 }

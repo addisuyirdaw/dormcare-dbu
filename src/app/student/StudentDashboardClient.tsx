@@ -144,16 +144,18 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
             )}
           </div>
         </div>
-        {activeShift ? (
-          <div className="alert alert-success" style={{ padding: '10px 16px' }}>
-            <span className="shift-indicator active" style={{ width: 10, height: 10 }} />
-            <span><strong>{activeShift.staff?.name}</strong> is on duty now</span>
-          </div>
-        ) : (
-          <div className="alert alert-warn" style={{ padding: '10px 16px' }}>
-            ⚠️ No staff currently on duty for your block
-          </div>
-        )}
+        <div className="flex flex-col items-end gap-3">
+          {activeShift ? (
+            <div className="alert alert-success" style={{ padding: '10px 16px', margin: 0 }}>
+              <span className="shift-indicator active" style={{ width: 10, height: 10 }} />
+              <span><strong>{activeShift.staff?.name}</strong> is on duty now</span>
+            </div>
+          ) : (
+            <div className="alert alert-warn" style={{ padding: '10px 16px', margin: 0 }}>
+              ⚠️ No staff currently on duty for your block
+            </div>
+          )}
+        </div>
       </div>
 
       {/* ── ACTIVE EXIT PASS (APPROVED CLEARANCE) ── */}

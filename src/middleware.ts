@@ -1,5 +1,8 @@
-import { auth } from '@/lib/auth';
+import NextAuth from 'next-auth';
+import { authConfig } from '@/lib/auth.config';
 import { NextResponse } from 'next/server';
+
+export const { auth } = NextAuth(authConfig);
 
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -13,7 +16,10 @@ export default auth((req) => {
 
   if (isPublicPath) {
     if (isLoggedIn && pathname === '/login') {
-      return NextResponse.redirect(new URL(getDashboard(role), req.nextUrl));
+      const dest = getDashboard(role);
+      if (dest !== '/login') {
+        return NextResponse.redirect(new URL(dest, req.nextUrl));
+      }
     }
     return NextResponse.next();
   }

@@ -92,7 +92,7 @@ function PrintTagsContent() {
             </div>
             <div style={{ display: 'flex', alignItems: 'flex-end' }}>
               <button 
-                onClick={fetchAssets}
+                onClick={() => fetchAssets()}
                 style={{ backgroundColor: '#111827', color: '#ffffff', fontWeight: 'bold', padding: '0.5rem 1.5rem', borderRadius: '0.25rem', border: 'none', cursor: 'pointer', height: '38px' }}
               >
                 Apply Filters

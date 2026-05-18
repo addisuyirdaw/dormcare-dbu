@@ -12,7 +12,7 @@ export async function GET(req: NextRequest) {
 
   if (blockId) {
     const shift = await prisma.shiftRegistry.findFirst({
-      where: { dormBlockId: blockId, isActive: true },
+      where: { primaryBlockId: blockId, isActive: true },
       include: { staff: { select: { name: true, phone: true } } },
       orderBy: { checkedInAt: 'desc' },
     });
@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
     where: { isActive: true },
     include: {
       staff: { select: { name: true } },
-      dormBlock: { select: { name: true, number: true } },
+      primaryBlock: { select: { name: true, number: true } },
     },
   });
   return NextResponse.json(shifts);
