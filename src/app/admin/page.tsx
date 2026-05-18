@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import Navbar from '@/components/Navbar';
 import AdminDashboardClient from './AdminDashboardClient';
+import { computeBlockHealthMetrics } from '@/lib/block-health';
 
 export default async function AdminPage() {
   const session = await auth();
@@ -190,6 +191,9 @@ export default async function AdminPage() {
     openCriticalCount: mergedIncidents.length,
   };
 
+  // AI Block Health Metrics
+  const blockHealthMetrics = await computeBlockHealthMetrics(blocks.map(b => b.id));
+
   const dashboardData = {
     blocks: blocks.map((b) => ({
       id: b.id,
@@ -198,6 +202,7 @@ export default async function AdminPage() {
       studentCount: b._count.users,
       activeStaff: b.shifts[0]?.staff?.name || null,
       isStaffed: b.shifts.length > 0,
+      health: blockHealthMetrics[b.id] || null,
     })),
     stats: { activeShifts, openTickets, todayAttendance, totalStudents, pendingClearances },
   };

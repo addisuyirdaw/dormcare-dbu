@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import { prisma } from '@/lib/db';
 import Navbar from '@/components/Navbar';
 import StaffDashboardClient from './StaffDashboardClient';
+import { computeBlockHealthMetrics } from '@/lib/block-health';
 
 export default async function StaffPage() {
   const session = await auth();
@@ -12,37 +13,64 @@ export default async function StaffPage() {
 
   const dbUser = await prisma.user.findUnique({
     where: { id: user.id },
-    include: { 
-      dormBlock: true, // Primary Office
-      managedBlocks: { select: { id: true, name: true, number: true } } // Multi-block Assignment
+    include: {
+      dormBlock: true,
+      managedBlocks: { select: { id: true, name: true, number: true } },
     },
   });
 
-  const managedBlockIds = dbUser?.managedBlocks.map((b) => b.id) || [];
-
-  const [activeShift, tickets, pendingClearances, resolvedToday] = await Promise.all([
+  // Staff has EQUAL campus-wide power — fetch ALL blocks/tickets/clearances
+  const [activeShift, tickets, pendingClearances, resolvedToday, allBlocks] = await Promise.all([
     prisma.shiftRegistry.findFirst({
       where: { staffId: user.id, isActive: true },
       orderBy: { checkedInAt: 'desc' },
     }),
+    // ALL tickets campus-wide
     prisma.emergencyTicket.findMany({
-      include: { student: { select: { name: true, studentId: true, room: { select: { roomNumber: true } } } }, dormBlock: { select: { name: true } } },
+      include: {
+        student: { select: { name: true, studentId: true, room: { select: { roomNumber: true } } } },
+        dormBlock: { select: { name: true, number: true } },
+      },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take: 100,
     }),
+    // ALL clearances campus-wide
     prisma.gateClearanceRequest.findMany({
-      include: { student: { select: { name: true, studentId: true, room: { select: { roomNumber: true } } } }, approvedBy: { select: { name: true } } },
+      include: {
+        student: { select: { name: true, studentId: true, room: { select: { roomNumber: true } } } },
+        approvedBy: { select: { name: true } },
+      },
       orderBy: { createdAt: 'desc' },
-      take: 50,
+      take: 100,
     }),
     prisma.emergencyTicket.count({
       where: {
-        assignedStaffId: user.id,
         status: 'RESOLVED',
         resolvedAt: { gte: new Date(new Date().setHours(0, 0, 0, 0)) },
       },
     }),
+    // ALL blocks with their shift/student data
+    prisma.dormBlock.findMany({
+      include: {
+        shifts: { where: { isActive: true }, include: { staff: { select: { name: true } } } },
+        _count: { select: { users: { where: { role: 'STUDENT' } } } },
+      },
+      orderBy: { number: 'asc' },
+    }),
   ]);
+
+  // Compute AI Block Health Metrics
+  const blockHealthMetrics = await computeBlockHealthMetrics(allBlocks.map(b => b.id));
+
+  const blocks = allBlocks.map((b) => ({
+    id: b.id,
+    name: b.name,
+    number: b.number,
+    studentCount: b._count.users,
+    activeStaff: b.shifts[0]?.staff?.name || null,
+    isStaffed: b.shifts.length > 0,
+    health: blockHealthMetrics[b.id] || null,
+  }));
 
   return (
     <div className="page">
@@ -53,6 +81,7 @@ export default async function StaffPage() {
         tickets={JSON.parse(JSON.stringify(tickets))}
         pendingClearances={JSON.parse(JSON.stringify(pendingClearances))}
         resolvedToday={resolvedToday}
+        blocks={JSON.parse(JSON.stringify(blocks))}
       />
     </div>
   );

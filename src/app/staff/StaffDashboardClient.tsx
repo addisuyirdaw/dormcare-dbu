@@ -9,7 +9,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 const DEFAULT_ASSET_TYPES = ['CHAIR', 'LOCKER', 'TABLE', 'BED', 'KEY'];
 
-export default function StaffDashboardClient({ user, activeShift, tickets, pendingClearances, resolvedToday }: any) {
+export default function StaffDashboardClient({ user, activeShift, tickets, pendingClearances, resolvedToday, blocks = [] }: any) {
   const router = useRouter();
   const [view, setView] = useState<'home' | 'scan'>('home');
   const [checkingIn, setCheckingIn] = useState(false);
@@ -384,6 +384,98 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
         </div>
       </div>
 
+
+      {/* ── AI Block Satisfaction Leaderboard ── */}
+      {blocks.some((b: any) => b.health) && (
+        <section className="mb-8 mt-8">
+          <div className="mb-4">
+            <h2 className="text-lg font-bold">🤖 AI Block Satisfaction Intelligence</h2>
+            <p className="text-sec text-sm mt-1">Campus-wide student–staff interaction analysis · sorted most critical first</p>
+          </div>
+
+          {/* Tier Summary */}
+          {(() => {
+            const critical = blocks.filter((b: any) => b.health?.tier === 'CRITICAL');
+            const medium   = blocks.filter((b: any) => b.health?.tier === 'MEDIUM');
+            const good     = blocks.filter((b: any) => b.health?.tier === 'GOOD');
+            return (
+              <div className="grid gap-4 md:grid-cols-3 mb-6">
+                <div className="rounded-xl border border-red-500/40 bg-red-950/30 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">🔴</span>
+                    <span className="font-bold text-red-300 text-sm uppercase tracking-wider">Critical ({critical.length})</span>
+                  </div>
+                  {critical.length === 0 ? <p className="text-xs text-red-400/70">None ✓</p>
+                    : critical.map((b: any) => (
+                      <div key={b.id} className="flex justify-between text-sm py-1 border-b border-red-900/40 last:border-0">
+                        <span className="font-bold text-white">Block {b.number} · {b.name}</span>
+                        <span className="font-mono text-red-300 text-xs">{b.health.score}/100</span>
+                      </div>
+                    ))}
+                </div>
+                <div className="rounded-xl border border-amber-500/40 bg-amber-950/20 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">🟡</span>
+                    <span className="font-bold text-amber-300 text-sm uppercase tracking-wider">Medium ({medium.length})</span>
+                  </div>
+                  {medium.length === 0 ? <p className="text-xs text-amber-400/70">None ✓</p>
+                    : medium.map((b: any) => (
+                      <div key={b.id} className="flex justify-between text-sm py-1 border-b border-amber-900/40 last:border-0">
+                        <span className="font-bold text-white">Block {b.number} · {b.name}</span>
+                        <span className="font-mono text-amber-300 text-xs">{b.health.score}/100</span>
+                      </div>
+                    ))}
+                </div>
+                <div className="rounded-xl border border-emerald-500/40 bg-emerald-950/20 p-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-2xl">🟢</span>
+                    <span className="font-bold text-emerald-300 text-sm uppercase tracking-wider">Good ({good.length})</span>
+                  </div>
+                  {good.length === 0 ? <p className="text-xs text-emerald-400/70">None yet</p>
+                    : good.map((b: any) => (
+                      <div key={b.id} className="flex justify-between text-sm py-1 border-b border-emerald-900/40 last:border-0">
+                        <span className="font-bold text-white">Block {b.number} · {b.name}</span>
+                        <span className="font-mono text-emerald-300 text-xs">{b.health.score}/100</span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Detailed block rows */}
+          <div className="flex flex-col gap-3">
+            {[...blocks]
+              .filter((b: any) => b.health)
+              .sort((a: any, b: any) => a.health.score - b.health.score)
+              .map((b: any) => {
+                const h = b.health;
+                const borderClass = h.tier === 'CRITICAL' ? 'border-red-500/30' : h.tier === 'MEDIUM' ? 'border-amber-500/30' : 'border-emerald-500/30';
+                const bgClass = h.tier === 'CRITICAL' ? 'bg-red-950/10' : h.tier === 'MEDIUM' ? 'bg-amber-950/10' : 'bg-emerald-950/10';
+                return (
+                  <div key={b.id} className={`rounded-xl border ${borderClass} ${bgClass} p-4`}>
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="min-w-[140px]">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span>{h.tier === 'CRITICAL' ? '🔴' : h.tier === 'MEDIUM' ? '🟡' : '🟢'}</span>
+                          <span className="font-bold text-sm">Block {b.number} · {b.name}</span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
+                          <div className="h-full rounded-full" style={{ width: `${h.score}%`, background: h.tier === 'CRITICAL' ? '#ef4444' : h.tier === 'MEDIUM' ? '#f59e0b' : '#10b981' }} />
+                        </div>
+                        <span className="text-xs font-mono" style={{ color: h.tier === 'CRITICAL' ? '#ef4444' : h.tier === 'MEDIUM' ? '#f59e0b' : '#10b981' }}>{h.score}/100</span>
+                      </div>
+                      <div className="text-xs text-slate-300 flex-1 max-w-xs">{h.aiVerdict}</div>
+                      <div className="text-xs text-slate-400 rounded-lg bg-black/30 border border-white/10 p-2 max-w-xs">
+                        <span className="font-bold text-white">📋 </span>{h.controlSuggestion}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
+        </section>
+      )}
 
       <div className="grid-2 gap-6">
         {/* Emergency Tickets Queue */}
