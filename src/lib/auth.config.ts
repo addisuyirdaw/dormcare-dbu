@@ -5,7 +5,8 @@ import type { NextAuthConfig } from 'next-auth';
  * Used by middleware (Edge Runtime). Providers are added in auth.ts.
  */
 export const authConfig = {
-  secret: process.env.NEXTAUTH_SECRET,
+  secret: process.env.AUTH_SECRET || process.env.NEXTAUTH_SECRET || 'dormcare-dbu-super-secret-key-1234567890',
+  trustHost: true,
   session: { strategy: 'jwt' as const },
   pages: {
     signIn: '/login',
