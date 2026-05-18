@@ -32,7 +32,10 @@ export async function resolveUniversityUser(identifier: string) {
 
   const byAccount = await prisma.user.findFirst({
     where: {
-      OR: [{ email }, { studentId: studentIdNorm }],
+      OR: [
+        { email },
+        ...(studentIdNorm ? [{ studentId: studentIdNorm }] : []),
+      ],
     },
     include: STUDENT_INCLUDE,
   });
