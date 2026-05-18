@@ -66,12 +66,21 @@ export default function LoginPage() {
   const [mode, setMode] = useState<AuthMode>('login');
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [activeSlide, setActiveSlide] = useState(0);
   const [animKey, setAnimKey] = useState(0); // forces re-mount → re-animation
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  /* Password Strength Validator */
+  const isPasswordStrong = () => {
+    if (mode === 'login') return true;
+    const hasLetters = /[a-zA-Z]/.test(password);
+    const hasNumbers = /[0-9]/.test(password);
+    return password.length >= 6 && hasLetters && hasNumbers;
+  };
 
   /* Auto-play */
   const startTimer = () => {
@@ -111,6 +120,10 @@ export default function LoginPage() {
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isPasswordStrong()) {
+      setError('Password must be at least 6 characters and contain a mix of letters and numbers.');
+      return;
+    }
     setLoading(true); setError(''); setSuccess('');
     const res = await fetch('/api/auth/register', {
       method: 'POST',
@@ -623,22 +636,47 @@ export default function LoginPage() {
               </div>
 
               <div className="lp-field">
-                <label className="lp-label" htmlFor="password">Password</label>
-                <input
-                  id="password"
-                  type="password"
-                  className="lp-input"
-                  autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
-                  placeholder={
-                    mode === 'login'
-                      ? 'Enter your password'
-                      : 'Choose a password (min. 6 chars)'
-                  }
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={mode === 'signup' ? 6 : 1}
-                />
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <label className="lp-label" htmlFor="password">Password</label>
+                  {mode === 'login' && (
+                    <button type="button" onClick={() => alert('Please contact your Proctor or DBU IT Support to reset your password.')} style={{ background: 'none', border: 'none', color: '#818cf8', fontSize: '0.75rem', cursor: 'pointer' }}>Forgot password?</button>
+                  )}
+                </div>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    id="password"
+                    type={showPassword ? 'text' : 'password'}
+                    className="lp-input"
+                    style={{ paddingRight: '2.5rem' }}
+                    autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+                    placeholder={
+                      mode === 'login'
+                        ? 'Enter your password'
+                        : 'Choose a password (min. 6 chars)'
+                    }
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    required
+                    minLength={mode === 'signup' ? 6 : 1}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    style={{
+                      position: 'absolute', right: '0.75rem', top: '50%', transform: 'translateY(-50%)',
+                      background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '1rem'
+                    }}
+                    tabIndex={-1}
+                    title={showPassword ? "Hide password" : "Show password"}
+                  >
+                    {showPassword ? '👁️' : '🙈'}
+                  </button>
+                </div>
+                {mode === 'signup' && password.length > 0 && (
+                  <div style={{ fontSize: '0.7rem', color: isPasswordStrong() ? '#22c55e' : '#f59e0b', marginTop: '0.2rem' }}>
+                    {isPasswordStrong() ? '✅ Password is strong' : '⚠️ Must contain letters and numbers (min 6 chars)'}
+                  </div>
+                )}
               </div>
 
               {error && <div className="lp-alert lp-alert-error">{error}</div>}
