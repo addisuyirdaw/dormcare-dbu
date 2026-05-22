@@ -10,15 +10,18 @@ export default async function StudentPage() {
   const user = session.user as any;
   if (user.role !== 'STUDENT') redirect('/login');
 
-  const [dbUser, tickets, clearances, activeShift] = await Promise.all([
-    prisma.user.findUnique({
-      where: { id: user.id },
-      include: { 
-        dormBlock: true,
-        room: { include: { assets: true } },
-        keyCustodianFor: true // relation to see if they are the custodian
-      },
-    }),
+  const dbUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    include: { 
+      dormBlock: true,
+      room: { include: { assets: true } },
+      keyCustodianFor: true // relation to see if they are the custodian
+    },
+  });
+
+  const blockId = dbUser?.dormBlockId;
+
+  const [tickets, clearances, activeShift] = await Promise.all([
     prisma.emergencyTicket.findMany({
       where: { studentId: user.id },
       include: { assignedStaff: { select: { name: true } }, dormBlock: { select: { name: true } } },
@@ -31,10 +34,14 @@ export default async function StudentPage() {
       orderBy: { createdAt: 'desc' },
       take: 5,
     }),
-    user.dormBlockId
+    blockId
       ? prisma.shiftRegistry.findFirst({
-          where: { staff: { managedBlocks: { some: { id: user.dormBlockId } } }, isActive: true },
+          where: {
+            isActive: true,
+            staff: { managedBlocks: { some: { id: blockId } } },
+          },
           include: { staff: { select: { name: true, phone: true } } },
+          orderBy: { checkedInAt: 'desc' },
         })
       : null,
   ]);

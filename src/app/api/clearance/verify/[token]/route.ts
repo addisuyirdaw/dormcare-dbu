@@ -9,16 +9,22 @@ export async function GET(
   const { token } = await params;
   if (!token) return NextResponse.json({ valid: false, error: 'No token provided' }, { status: 400 });
 
-  const request = await prisma.gateClearanceRequest.findUnique({
-    where: { verificationToken: token },
+  // Accept both legacy verificationToken and new departureId exit codes
+  const request = await prisma.gateClearanceRequest.findFirst({
+    where: {
+      OR: [
+        { verificationToken: token },
+        { departureId: token },
+      ],
+    },
     include: {
       student: { select: { name: true, studentId: true, dormBlock: { select: { name: true, number: true } } } },
       approvedBy: { select: { name: true } },
     },
   });
 
-  if (!request) return NextResponse.json({ valid: false, error: 'Token not found' }, { status: 404 });
-  if (request.status !== 'APPROVED') return NextResponse.json({ valid: false, error: 'Clearance not approved' }, { status: 400 });
+  if (!request) return NextResponse.json({ valid: false, error: 'Exit code not found. Please ensure the student has an approved clearance.' }, { status: 404 });
+  if (request.status !== 'APPROVED' && request.status !== 'RELEASED') return NextResponse.json({ valid: false, error: 'Clearance not approved' }, { status: 400 });
 
   const now = new Date();
   if (request.tokenExpiresAt && request.tokenExpiresAt < now) {
@@ -38,6 +44,8 @@ export async function GET(
     approvedBy: request.approvedBy,
     approvedAt: request.approvedAt,
     tokenExpiresAt: request.tokenExpiresAt,
+    departureId: request.departureId,
+    verificationToken: request.verificationToken,
     items,
   });
 }

@@ -33,6 +33,7 @@ model User {
   shifts             ShiftRegistry[]
   clearanceRequests  GateClearanceRequest[] @relation("ClearanceRequester")
   approvedClearances GateClearanceRequest[] @relation("ClearanceApprover")
+  assignedClearances GateClearanceRequest[] @relation("ClearanceAssignee")
   attendanceLogs     AttendanceLog[]        @relation("AttendanceStudent")
   scannedLogs        AttendanceLog[]        @relation("AttendanceScanner")
   maintenanceTickets MaintenanceTicket[]    @relation("MaintenanceReporter")
@@ -153,14 +154,21 @@ model GateClearanceRequest {
   tokenExpiresAt       DateTime?
   approvedById         String?
   approvedAt           DateTime?
+  assignedStaffId      String?   // Proctor assigned to handle this clearance (block-scoped)
   rejectionReason      String?
   flaggedMissingAssets String?   // Logs missing assets if rejected based on room audit
   personalItems        String?   // JSON string of declared personal items
+  clothesCount         Int?      @default(0)
+  trousersCount        Int?      @default(0)
+  sweatersCount        Int?      @default(0)
+  otherAssets          String?   // text area or custom items representation
+  departureId          String?   @unique
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
 
-  student    User  @relation("ClearanceRequester", fields: [studentId], references: [id])
-  approvedBy User? @relation("ClearanceApprover", fields: [approvedById], references: [id])
+  student      User  @relation("ClearanceRequester", fields: [studentId], references: [id])
+  approvedBy   User? @relation("ClearanceApprover", fields: [approvedById], references: [id])
+  assignedStaff User? @relation("ClearanceAssignee", fields: [assignedStaffId], references: [id])
 }
 
 // ── Unified Digital Audit Loop ──────────────────────────────────────────────

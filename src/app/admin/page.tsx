@@ -17,7 +17,6 @@ export default async function AdminPage() {
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
   const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
 
-  // Fetch all initial data server-side
   const [
     blocks,
     activeShifts,
@@ -34,6 +33,10 @@ export default async function AdminPage() {
     totalIssueReportsWeek,
     keyCustodians,
     damagedInventory,
+    openTicketsForMonitor,
+    openClearancesForMonitor,
+    proctors,
+    allBlocksForProctors,
   ] = await Promise.all([
     prisma.dormBlock.findMany({
       include: {
@@ -58,13 +61,7 @@ export default async function AdminPage() {
     prisma.emergencyTicket.findMany({
       where: { status: { in: ['OPEN', 'IN_PROGRESS'] } },
       include: {
-        student: {
-          select: {
-            name: true,
-            studentId: true,
-            room: { select: { roomNumber: true } },
-          },
-        },
+        student: { select: { name: true, studentId: true, room: { select: { roomNumber: true } } } },
         dormBlock: { select: { number: true, name: true } },
       },
       orderBy: { updatedAt: 'desc' },
@@ -72,24 +69,52 @@ export default async function AdminPage() {
     }),
     prisma.issueReport.findMany({
       where: { status: 'OPEN' },
-      include: {
-        student: { select: { name: true, studentId: true } },
-      },
+      include: { student: { select: { name: true, studentId: true } } },
       orderBy: { createdAt: 'desc' },
       take: 15,
     }),
-    prisma.emergencyTicket.count({
-      where: { category: 'WATER', createdAt: { gte: weekAgo } },
-    }),
-    prisma.emergencyTicket.count({
-      where: { category: 'WATER', createdAt: { gte: twoWeeksAgo, lt: weekAgo } },
-    }),
-    prisma.emergencyTicket.count({
-      where: { category: 'ELECTRICAL', createdAt: { gte: weekAgo } },
-    }),
+    prisma.emergencyTicket.count({ where: { category: 'WATER', createdAt: { gte: weekAgo } } }),
+    prisma.emergencyTicket.count({ where: { category: 'WATER', createdAt: { gte: twoWeeksAgo, lt: weekAgo } } }),
+    prisma.emergencyTicket.count({ where: { category: 'ELECTRICAL', createdAt: { gte: weekAgo } } }),
     prisma.issueReport.count({ where: { createdAt: { gte: weekAgo } } }),
     prisma.user.count({ where: { keyCustodianFor: { isNot: null } } }),
     prisma.inventoryItem.count({ where: { condition: { not: 'GOOD' } } }),
+    // Response-time monitor: open tickets
+    prisma.emergencyTicket.findMany({
+      where: { status: { in: ['OPEN', 'IN_PROGRESS'] } },
+      include: {
+        student: { select: { name: true, room: { select: { roomNumber: true } } } },
+        assignedStaff: { select: { name: true } },
+        dormBlock: { select: { number: true, name: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    }),
+    // Response-time monitor: open clearances
+    prisma.gateClearanceRequest.findMany({
+      where: { status: { in: ['PENDING', 'PENDING_STAFF_SIGNATURE'] } },
+      include: {
+        student: { select: { name: true, room: { select: { roomNumber: true } } } },
+        assignedStaff: { select: { name: true } },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 50,
+    }),
+    // Proctor list
+    prisma.user.findMany({
+      where: { role: 'STAFF' },
+      include: {
+        managedBlocks: { select: { id: true, name: true, number: true } },
+        shifts: {
+          orderBy: { createdAt: 'desc' },
+          take: 1,
+          select: { isActive: true, checkedInAt: true, createdAt: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    }),
+    // All blocks for create-proctor form
+    prisma.dormBlock.findMany({ select: { id: true, name: true, number: true }, orderBy: { number: 'asc' } }),
   ]);
 
   function incidentTitle(category: string) {
@@ -109,12 +134,10 @@ export default async function AdminPage() {
       ticket.student.room?.roomNumber ??
       ticket.description?.match(/Room\s+([\w-]+)/i)?.[1] ??
       '—';
-    const blockLabel = String(ticket.dormBlock.number);
-
     return {
       id: ticket.id,
       title: incidentTitle(ticket.category),
-      blockLabel,
+      blockLabel: String(ticket.dormBlock.number),
       roomNumber,
       studentName: ticket.student.name,
       studentId: ticket.student.studentId,
@@ -130,21 +153,17 @@ export default async function AdminPage() {
     .map((issue) => ({
       id: issue.id,
       title:
-        issue.category === 'WATER'
-          ? '💧 WATER MAIN EMERGENCY'
-          : issue.category === 'ELECTRICITY'
-            ? '⚡ TOTAL BLOCK BLACKOUT'
-            : `📋 ${issue.category} REPORT`,
+        issue.category === 'WATER' ? '💧 WATER MAIN EMERGENCY'
+        : issue.category === 'ELECTRICITY' ? '⚡ TOTAL BLOCK BLACKOUT'
+        : `📋 ${issue.category} REPORT`,
       blockLabel: issue.roomNumber.split('-')[0] || '—',
       roomNumber: issue.roomNumber,
       studentName: issue.student.name,
       studentId: issue.student.studentId,
       statusLabel:
-        issue.category === 'WATER'
-          ? 'CRITICAL - SMART VALVE CLOSED'
-          : issue.category === 'ELECTRICITY'
-            ? 'ESCALATED - TWILIO CALL OUT'
-            : 'OPEN - ADMIN REVIEW',
+        issue.category === 'WATER' ? 'CRITICAL - SMART VALVE CLOSED'
+        : issue.category === 'ELECTRICITY' ? 'ESCALATED - TWILIO CALL OUT'
+        : 'OPEN - ADMIN REVIEW',
       updatedAt: issue.createdAt.toISOString(),
       isAdminRouted: issue.description.includes('ADMIN_DASHBOARD'),
       source: 'issue' as const,
@@ -161,14 +180,8 @@ export default async function AdminPage() {
     waterSpikePct = Math.round(((waterThisWeek - waterLastWeek) / waterLastWeek) * 100);
   }
 
-  const utilityStability = Math.max(
-    62,
-    Math.min(99, 96 - waterThisWeek * 4 - electricThisWeek * 6 - openTickets * 2),
-  );
-  const complianceScore = Math.max(
-    70,
-    Math.min(98, 94 - damagedInventory * 0.5 - openTickets * 3),
-  );
+  const utilityStability = Math.max(62, Math.min(99, 96 - waterThisWeek * 4 - electricThisWeek * 6 - openTickets * 2));
+  const complianceScore = Math.max(70, Math.min(98, 94 - damagedInventory * 0.5 - openTickets * 3));
   const reportingSpeedLabel =
     totalIssueReportsWeek > 0 ? `${(24 / Math.max(totalIssueReportsWeek, 1)).toFixed(1)}h avg triage` : '< 2h avg triage';
 
@@ -191,7 +204,6 @@ export default async function AdminPage() {
     openCriticalCount: mergedIncidents.length,
   };
 
-  // AI Block Health Metrics
   const blockHealthMetrics = await computeBlockHealthMetrics(blocks.map(b => b.id));
 
   const dashboardData = {
@@ -207,6 +219,45 @@ export default async function AdminPage() {
     stats: { activeShifts, openTickets, todayAttendance, totalStudents, pendingClearances },
   };
 
+  // Build response-time monitor items (sorted longest wait first)
+  const now = new Date();
+  const responseItems = [
+    ...openTicketsForMonitor.map(t => ({
+      id: t.id,
+      type: 'TICKET' as const,
+      category: t.category,
+      studentName: t.student.name,
+      roomNumber: t.student.room?.roomNumber ?? '—',
+      blockLabel: `Block ${t.dormBlock.number} · ${t.dormBlock.name}`,
+      assignedProctor: t.assignedStaff?.name ?? null,
+      status: t.status,
+      createdAt: t.createdAt.toISOString(),
+      waitingMinutes: Math.floor((now.getTime() - t.createdAt.getTime()) / 60000),
+    })),
+    ...openClearancesForMonitor.map(c => ({
+      id: c.id,
+      type: 'CLEARANCE' as const,
+      category: 'FINAL CLEARANCE',
+      studentName: c.student.name,
+      roomNumber: c.student.room?.roomNumber ?? '—',
+      blockLabel: '—',
+      assignedProctor: c.assignedStaff?.name ?? null,
+      status: c.status,
+      createdAt: c.createdAt.toISOString(),
+      waitingMinutes: Math.floor((now.getTime() - c.createdAt.getTime()) / 60000),
+    })),
+  ].sort((a, b) => b.waitingMinutes - a.waitingMinutes);
+
+  const proctorList = proctors.map(p => ({
+    id: p.id,
+    name: p.name,
+    email: p.email,
+    phone: p.phone,
+    managedBlocks: p.managedBlocks,
+    isOnDuty: p.shifts[0]?.isActive ?? false,
+    lastShiftAt: p.shifts[0]?.checkedInAt?.toISOString() ?? null,
+  }));
+
   return (
     <div className="page">
       <Navbar userName={user?.name} role="ADMIN" />
@@ -215,6 +266,9 @@ export default async function AdminPage() {
         recentLogs={JSON.parse(JSON.stringify(recentLogs))}
         incidents={JSON.parse(JSON.stringify(mergedIncidents))}
         serviceAnalytics={JSON.parse(JSON.stringify(serviceAnalytics))}
+        responseItems={JSON.parse(JSON.stringify(responseItems))}
+        proctorList={JSON.parse(JSON.stringify(proctorList))}
+        allBlocks={JSON.parse(JSON.stringify(allBlocksForProctors))}
       />
     </div>
   );

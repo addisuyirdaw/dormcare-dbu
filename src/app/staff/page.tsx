@@ -19,14 +19,19 @@ export default async function StaffPage() {
     },
   });
 
+  const managedBlockIds = dbUser?.managedBlocks?.map(b => b.id) ?? [];
+  // If proctor has no managed blocks explicitly assigned, give campus-wide visibility
+  const hasBlockScope = managedBlockIds.length > 0;
+
   // Staff has EQUAL campus-wide power — fetch ALL blocks/tickets/clearances
   const [activeShift, tickets, pendingClearances, resolvedToday, allBlocks] = await Promise.all([
     prisma.shiftRegistry.findFirst({
       where: { staffId: user.id, isActive: true },
       orderBy: { checkedInAt: 'desc' },
     }),
-    // ALL tickets campus-wide
+    // Tickets: globally across the entire campus
     prisma.emergencyTicket.findMany({
+      where: {},
       include: {
         student: { select: { name: true, studentId: true, room: { select: { roomNumber: true } } } },
         dormBlock: { select: { name: true, number: true } },
@@ -34,10 +39,22 @@ export default async function StaffPage() {
       orderBy: { createdAt: 'desc' },
       take: 100,
     }),
-    // ALL clearances campus-wide
+    // Clearances: globally across the entire campus without any block scoping
     prisma.gateClearanceRequest.findMany({
+      where: {},
       include: {
-        student: { select: { name: true, studentId: true, room: { select: { roomNumber: true } } } },
+        student: {
+          select: {
+            name: true,
+            studentId: true,
+            room: {
+              select: {
+                roomNumber: true,
+                assets: { select: { id: true, type: true, quantity: true, status: true } },
+              },
+            },
+          },
+        },
         approvedBy: { select: { name: true } },
       },
       orderBy: { createdAt: 'desc' },

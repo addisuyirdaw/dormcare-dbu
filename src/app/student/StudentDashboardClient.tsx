@@ -12,6 +12,7 @@ const STATUS_BADGE: Record<string, string> = {
   OPEN:        'badge-red',
   IN_PROGRESS: 'badge-amber',
   RESOLVED:    'badge-green',
+  REJECTED:    'badge-red',
 };
 
 export default function StudentDashboardClient({ user, tickets, clearances, activeShift }: any) {
@@ -30,9 +31,10 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
   const [showMyClearances, setShowMyClearances] = useState(true);
   const [showMyTickets, setShowMyTickets] = useState(true);
 
-  // NEW STATE: Personal Belongings Declaration
+  // Personal Belongings Declaration
+  const [clothes, setClothes] = useState(0);
   const [trousers, setTrousers] = useState(0);
-  const [jackets, setJackets] = useState(0);
+  const [sweaters, setSweaters] = useState(0);
   const [electronics, setElectronics] = useState(0);
   const [customItems, setCustomItems] = useState<{name: string, count: number}[]>([]);
 
@@ -88,7 +90,7 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
     // Prevent zero-item declarations
     const validCustomItems = customItems.filter(item => item.name.trim() !== '' && item.count > 0);
     const totalCustomItems = validCustomItems.reduce((acc, item) => acc + item.count, 0);
-    const totalItems = trousers + jackets + electronics + totalCustomItems;
+    const totalItems = clothes + trousers + sweaters + electronics + totalCustomItems;
 
     if (totalItems === 0) {
       setError('You must declare at least one personal belonging to submit a declaration.');
@@ -102,8 +104,9 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           personalItems: {
+            clothes,
             trousers,
-            jackets,
+            sweaters,
             electronics,
             otherItems: validCustomItems
           }
@@ -159,21 +162,24 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
       </div>
 
       {/* ── ACTIVE EXIT PASS (APPROVED CLEARANCE) ── */}
-      {clearances.filter((c: any) => c.status === 'APPROVED').map((c: any) => (
+      {clearances.filter((c: any) => c.status === 'APPROVED' || c.status === 'RELEASED').map((c: any) => (
         <div key={c.id} className="card mb-6 animate-in" style={{ background: 'linear-gradient(135deg, rgba(22,163,74,0.15) 0%, rgba(34,197,94,0.05) 100%)', border: '1px solid rgba(34,197,94,0.4)', boxShadow: '0 4px 20px rgba(34,197,94,0.1)' }}>
           <div className="card-p flex items-center justify-between flex-wrap gap-4">
-            <div>
+            <div className="flex-1">
               <div className="flex items-center gap-2 mb-1">
-                <span className="badge" style={{ background: '#22c55e', color: '#000', fontWeight: 800, fontSize: '14px', padding: '6px 12px' }}>ACCEPTED</span>
-                <span className="text-green-400 font-bold tracking-wide">Ready for Departure</span>
+                <span className="badge" style={{ background: '#22c55e', color: '#000', fontWeight: 800, fontSize: '14px', padding: '6px 12px' }}>✅ CLEARANCE APPROVED</span>
               </div>
-              <p className="text-sm text-sec mt-2 max-w-md">Your room audit is complete and your belongings have been verified by Proctor {c.approvedBy?.name}. You may now show this pass at the gate to leave the university.</p>
-              
-              <div className="mt-4 inline-block">
-                <span className="text-xs text-muted uppercase tracking-wider block mb-1 font-bold">Gate Exit Token</span>
-                <span className="font-mono text-2xl font-bold tracking-widest text-white bg-black/40 px-4 py-2 rounded-lg border border-green-500/30 shadow-inner">
-                  {c.verificationToken}
+              <p className="text-sm text-sec mt-2 max-w-md">
+                Your belongings have been verified by <strong className="text-slate-200">{c.approvedBy?.name || 'Proctor'}</strong>. Present your exit code at the gate to depart.
+              </p>
+
+              {/* EXIT CODE — same code sent to security guard */}
+              <div className="mt-4">
+                <span className="text-[10px] text-muted uppercase tracking-wider block mb-2 font-bold">🚪 Departure Exit Code (Show to Security Guard)</span>
+                <span className="font-mono text-3xl font-black tracking-widest text-emerald-300 bg-black/50 px-5 py-3 rounded-xl border border-emerald-500/40 shadow-inner inline-block">
+                  {c.departureId ?? c.verificationToken ?? '—'}
                 </span>
+                <p className="text-[10px] text-slate-500 mt-2">This is the same code the security guard will verify at the gate.</p>
               </div>
             </div>
             <div className="flex-shrink-0 text-center">
@@ -293,8 +299,9 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
               setView('clearance'); 
               setClearanceSuccess(null); 
               setError(''); 
+              setClothes(0);
               setTrousers(0);
-              setJackets(0);
+              setSweaters(0);
               setElectronics(0);
               setCustomItems([]);
             }}>
@@ -332,21 +339,43 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
             </button>
           </div>
           {showMyClearances && (
-            <div className="table-wrap border-t-0">
-              <table className="table">
-                <thead><tr><th>Type</th><th>Status</th><th>Token</th><th>Notes</th><th>Date</th></tr></thead>
-                <tbody>
-                  {clearances.map((c: any) => (
-                    <tr key={c.id}>
-                      <td>Room Audit</td>
-                      <td><span className={`badge ${c.status === 'APPROVED' ? 'badge-green' : c.status === 'PENDING' ? 'badge-amber' : c.status === 'PENDING_STAFF_SIGNATURE' ? 'badge-amber' : 'badge-red'}`}>{c.status.replace(/_/g, ' ')}</span></td>
-                      <td className="font-mono text-green">{c.verificationToken || '—'}</td>
-                      <td>{c.flaggedMissingAssets ? <span className="text-red">Missing: {c.flaggedMissingAssets}</span> : c.approvedBy?.name || '—'}</td>
-                      <td className="text-xs text-muted">{new Date(c.createdAt).toLocaleDateString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="flex flex-col gap-2 p-4">
+              {clearances.map((c: any) => (
+                <div key={c.id} className="rounded-xl border p-3 flex flex-col gap-2" style={{ borderColor: 'var(--border)', background: 'var(--bg-raised)' }}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className={`badge ${
+                        c.status === 'APPROVED' ? 'badge-green' :
+                        c.status === 'RELEASED' ? 'badge-blue' :
+                        (c.status === 'PENDING' || c.status === 'PENDING_STAFF_SIGNATURE') ? 'badge-amber' : 'badge-red'
+                      }`} style={{ fontSize: '0.65rem' }}>{c.status.replace(/_/g, ' ')}</span>
+                      <span className="text-xs text-muted">{new Date(c.createdAt).toLocaleDateString()}</span>
+                    </div>
+                    {(c.status === 'APPROVED' || c.status === 'RELEASED') && c.approvedBy?.name && (
+                      <span className="text-[10px] text-green-400 font-bold">✓ Approved by {c.approvedBy.name}</span>
+                    )}
+                    {c.status === 'REJECTED' && (
+                      <span className="text-[10px] text-red-400 font-bold">✗ Rejected{c.approvedBy?.name ? ` by ${c.approvedBy.name}` : ''}</span>
+                    )}
+                    {(c.status === 'PENDING' || c.status === 'PENDING_STAFF_SIGNATURE') && (
+                      <span className="text-[10px] text-amber-400">⏳ Awaiting proctor review</span>
+                    )}
+                  </div>
+                  {/* Exit code visible to student — same code security guard sees */}
+                  {(c.departureId || c.verificationToken) && (c.status === 'APPROVED' || c.status === 'RELEASED') && (
+                    <div className="flex items-center justify-between bg-emerald-950/20 border border-emerald-500/20 rounded px-3 py-1.5">
+                      <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">🚪 Exit Code</span>
+                      <span className="font-mono font-black text-emerald-300 text-sm">{c.departureId ?? c.verificationToken}</span>
+                    </div>
+                  )}
+                  {/* Rejection reason */}
+                  {c.rejectionReason && (
+                    <div className="text-[10px] text-red-400 bg-red-950/20 border border-red-500/20 rounded px-3 py-1.5">
+                      Reason: {c.rejectionReason}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -389,9 +418,7 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
         </div>
       )}
     </div>
-  );
-
-  // ── TICKET FORM VIEW ──
+  );  // ── TICKET FORM VIEW ──
   if (view === 'ticket') {
     const cfg = CATEGORY_CONFIG[ticketCategory as keyof typeof CATEGORY_CONFIG];
     return (
@@ -405,6 +432,21 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
           </div>
         ) : (
           <div className="card card-p">
+            {/* Active Proctor on Duty Today Banner */}
+            <div className="mb-5 p-4 rounded-xl border" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(99,102,241,0.06) 100%)', borderColor: 'rgba(99,102,241,0.3)' }}>
+              <div className="flex items-start gap-3">
+                <span className="text-xl mt-0.5">🛡️</span>
+                <div>
+                  <p className="text-[11px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Active Proctor on Duty for Your Block Today</p>
+                  {activeShift?.staff?.name ? (
+                    <p className="text-sm font-bold text-slate-200">{activeShift.staff.name} {activeShift.staff.phone ? `— ${activeShift.staff.phone}` : ''}</p>
+                  ) : (
+                    <p className="text-sm font-semibold text-amber-300">Dormitory Management Center (Admin Routing)</p>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className={`emergency-btn ${cfg.cls} mb-6`} style={{ minHeight: 80, flexDirection: 'row', justifyContent: 'flex-start', padding: '16px 20px' }}>
               <span style={{ fontSize: '2rem' }}>{cfg.icon}</span>
               <div>
@@ -464,6 +506,21 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
         </div>
       ) : (
         <div className="card card-p">
+          {/* Active Proctor on Duty for Your Block Banner */}
+          <div className="mb-5 p-4 rounded-xl border" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.12) 0%, rgba(99,102,241,0.06) 100%)', borderColor: 'rgba(99,102,241,0.3)' }}>
+            <div className="flex items-start gap-3">
+              <span className="text-xl mt-0.5">🛡️</span>
+              <div>
+                <p className="text-[11px] text-indigo-400 font-bold uppercase tracking-wider mb-0.5">Active Proctor on Duty for Your Block Today</p>
+                {activeShift?.staff?.name ? (
+                  <p className="text-sm font-bold text-slate-200">{activeShift.staff.name} {activeShift.staff.phone ? `— ${activeShift.staff.phone}` : ''}</p>
+                ) : (
+                  <p className="text-sm font-semibold text-amber-300">Dormitory Management Center (Admin Routing)</p>
+                )}
+              </div>
+            </div>
+          </div>
+
           <h2 className="mb-2">Confirm Audit Request</h2>
           <p className="text-sec text-sm mb-6">Staff will verify the university property assigned to Room {user?.room?.roomNumber} before granting you a gate exit token.</p>
           
@@ -476,6 +533,19 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
             <p className="text-sm text-sec mb-4">Please register your personal items for exit counting.</p>
             
             <div className="flex flex-col gap-4">
+              {/* Clothes */}
+              <div className="flex justify-between items-center">
+                <label className="font-medium">Clothes (Total Pieces)</label>
+                <input 
+                  type="number" 
+                  min="0" 
+                  value={clothes} 
+                  onChange={(e) => setClothes(parseInt(e.target.value) || 0)}
+                  className="form-input" 
+                  style={{ width: '80px', background: 'var(--bg-raised)', border: '1px solid var(--border)' }}
+                />
+              </div>
+              {/* Trousers */}
               <div className="flex justify-between items-center">
                 <label className="font-medium">Trousers</label>
                 <input 
@@ -487,17 +557,19 @@ export default function StudentDashboardClient({ user, tickets, clearances, acti
                   style={{ width: '80px', background: 'var(--bg-raised)', border: '1px solid var(--border)' }}
                 />
               </div>
+              {/* Sweaters */}
               <div className="flex justify-between items-center">
                 <label className="font-medium">Sweaters / Jackets</label>
                 <input 
                   type="number" 
                   min="0" 
-                  value={jackets} 
-                  onChange={(e) => setJackets(parseInt(e.target.value) || 0)}
+                  value={sweaters} 
+                  onChange={(e) => setSweaters(parseInt(e.target.value) || 0)}
                   className="form-input" 
                   style={{ width: '80px', background: 'var(--bg-raised)', border: '1px solid var(--border)' }}
                 />
               </div>
+              {/* Electronics */}
               <div className="flex justify-between items-center">
                 <label className="font-medium">Laptops / Electronics</label>
                 <input 

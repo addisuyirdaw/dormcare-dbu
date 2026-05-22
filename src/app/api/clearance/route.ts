@@ -124,14 +124,31 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. SUCCESS LOGIC: Clean state, change to PENDING_STAFF_SIGNATURE
-    // We no longer auto-approve and generate token immediately.
-    
+    // Find the active shift proctor managing the student's block for routing.
+    const activeShift = await prisma.shiftRegistry.findFirst({
+      where: {
+        isActive: true,
+        staff: { managedBlocks: { some: { id: student.dormBlockId ?? '' } } },
+      },
+      orderBy: { checkedInAt: 'desc' },
+    });
+
+    const clothesCount = personalItems?.clothes || 0;
+    const trousersCount = personalItems?.trousers || 0;
+    const sweatersCount = personalItems?.sweaters || 0;
+    const otherAssetsStr = personalItems?.otherItems ? JSON.stringify(personalItems.otherItems) : null;
+
     const pendingRequest = await prisma.gateClearanceRequest.create({
       data: {
         studentId,
         status: 'PENDING_STAFF_SIGNATURE',
         personalItems: personalItemsStr,
-      } as any
+        clothesCount,
+        trousersCount,
+        sweatersCount,
+        otherAssets: otherAssetsStr,
+        assignedStaffId: activeShift?.staffId ?? null,
+      }
     });
 
     return NextResponse.json({
@@ -162,7 +179,7 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const { id, action, rejectionReason, missingAssetsStr } = body;
 
-  if (!id || !['APPROVED', 'REJECTED'].includes(action)) {
+  if (!id || !['APPROVED', 'REJECTED', 'RELEASED'].includes(action)) {
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   }
 
@@ -239,9 +256,21 @@ export async function PATCH(req: NextRequest) {
     }
   }
 
-  // ── All clear — proceed with normal approval / rejection ──────────────────
+  // ── All clear — proceed with normal approval / rejection / release ────────
   const tokenExpiresAt = new Date();
   tokenExpiresAt.setHours(tokenExpiresAt.getHours() + 24);
+
+  const isReleased = action === 'RELEASED';
+  
+  let departureId = null;
+  if (action === 'APPROVED') {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let rand = '';
+    for (let i = 0; i < 4; i++) {
+      rand += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    departureId = `DEP-DBU-${rand}`;
+  }
 
   const updated = await prisma.gateClearanceRequest.update({
     where: { id },
@@ -249,10 +278,13 @@ export async function PATCH(req: NextRequest) {
       status:              action,
       approvedById:        user.id,
       approvedAt:          new Date(),
-      verificationToken:   action === 'APPROVED' ? uuidv4().replace(/-/g, '').substring(0, 12).toUpperCase() : null,
-      tokenExpiresAt:      action === 'APPROVED' ? tokenExpiresAt : null,
+      ...(isReleased ? {} : {
+        verificationToken:   action === 'APPROVED' ? uuidv4().replace(/-/g, '').substring(0, 12).toUpperCase() : null,
+        tokenExpiresAt:      action === 'APPROVED' ? tokenExpiresAt : null,
+      }),
       rejectionReason:     action === 'REJECTED' ? rejectionReason : null,
       flaggedMissingAssets: action === 'REJECTED' ? missingAssetsStr : null,
+      ...(action === 'APPROVED' ? { departureId } : {}),
     },
     include: { student: { select: { name: true, studentId: true } } },
   });

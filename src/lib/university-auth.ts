@@ -48,7 +48,7 @@ export async function resolveUniversityUser(identifier: string) {
     });
   }
 
-  if (lower === 'staff2' || lower === 'admin') {
+  if (lower === 'admin') {
     return prisma.user.findFirst({
       where: { role: 'ADMIN' },
       include: STUDENT_INCLUDE,

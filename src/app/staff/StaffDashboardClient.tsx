@@ -19,13 +19,66 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
   // UI Toggles
   const [showTicketHistory, setShowTicketHistory] = useState(false);
   const [showClearanceHistory, setShowClearanceHistory] = useState(false);
+
+  // Dynamic Collapsible Accordion States
+  const [expandedBlockIds, setExpandedBlockIds] = useState<string[]>([]);
+  const [expandedClearanceIds, setExpandedClearanceIds] = useState<string[]>([]);
+  const [expandedTicketIds, setExpandedTicketIds] = useState<string[]>([]);
+
+  const toggleBlockExpanded = (id: string) => {
+    setExpandedBlockIds(prev => prev.includes(id) ? prev.filter(b => b !== id) : [...prev, id]);
+  };
+  const toggleClearanceExpanded = (id: string) => {
+    setExpandedClearanceIds(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  };
+  const toggleTicketExpanded = (id: string) => {
+    setExpandedTicketIds(prev => prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]);
+  };
+
+  // Clearance Action Processing State
+  const [processingClearanceId, setProcessingClearanceId] = useState<string | null>(null);
+
+  const handleClearanceAction = async (id: string, action: 'APPROVED' | 'REJECTED' | 'RELEASED', rejectionReason?: string) => {
+    setProcessingClearanceId(id);
+    try {
+      const res = await fetch('/api/clearance', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          id, 
+          action, 
+          rejectionReason: action === 'REJECTED' ? (rejectionReason || 'Rejected by proctor') : undefined
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        alert(`Error: ${data.error || data.message || 'Failed to update clearance.'}`);
+        return;
+      }
+      router.refresh();
+    } catch (e: any) {
+      alert(`Network error: ${e.message}`);
+    } finally {
+      setProcessingClearanceId(null);
+    }
+  };
+
+  const onRejectClearance = async (id: string) => {
+    const reason = prompt("Please enter the reason for rejection:");
+    if (reason === null) return; // Cancelled
+    if (!reason.trim()) {
+      alert("A rejection reason is required.");
+      return;
+    }
+    await handleClearanceAction(id, 'REJECTED', reason);
+  };
   
   // Split Data
   const activeTickets = tickets.filter((t: any) => t.status === 'OPEN' || t.status === 'IN_PROGRESS');
-  const resolvedTickets = tickets.filter((t: any) => t.status === 'RESOLVED').slice(0, 5);
+  const resolvedTickets = tickets.filter((t: any) => t.status === 'RESOLVED' || t.status === 'REJECTED').slice(0, 5);
   
   const activeClearances = pendingClearances.filter((c: any) => c.status === 'PENDING' || c.status === 'PENDING_STAFF_SIGNATURE');
-  const resolvedClearances = pendingClearances.filter((c: any) => c.status !== 'PENDING' && c.status !== 'PENDING_STAFF_SIGNATURE').slice(0, 5);
+  const resolvedClearances = pendingClearances.filter((c: any) => c.status === 'APPROVED' || c.status === 'RELEASED' || c.status === 'REJECTED');
 
   // Notification Logic
   const [prevClearanceCount, setPrevClearanceCount] = useState(activeClearances.length);
@@ -54,11 +107,7 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
     setPrevClearanceCount(activeClearances.length);
   }, [activeClearances.length, prevClearanceCount]);
   
-  // Clearance Audit Modal State
-  const [auditModal, setAuditModal] = useState<any | null>(null);
-  const [roomAssets, setRoomAssets] = useState<any[]>([]);
-  const [loadingAssets, setLoadingAssets] = useState(false);
-  const [flaggedAsset, setFlaggedAsset] = useState<string>('');
+
   
   // Master Asset Registration State
   const [blockNum, setBlockNum] = useState<number>(1);
@@ -146,51 +195,7 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
     router.refresh();
   };
 
-  // ── Room Baseline Audit (Clearance) ──
-  const openAuditModal = async (clearance: any) => {
-    setAuditModal(clearance);
-    setLoadingAssets(true);
-    setFlaggedAsset('');
-    try {
-      const res = await fetch(`/api/rooms/${clearance.student.room.roomNumber}`);
-      if (res.ok) {
-        const data = await res.json();
-        setRoomAssets(data.assets);
-      }
-    } catch (e) {
-      console.error("Failed to load room assets");
-    } finally {
-      setLoadingAssets(false);
-    }
-  };
 
-  const submitAudit = async (action: 'APPROVED' | 'REJECTED') => {
-    if (action === 'REJECTED' && !flaggedAsset) {
-      alert("Please specify which asset is missing to reject the clearance.");
-      return;
-    }
-    try {
-      const res = await fetch('/api/clearance', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          id: auditModal.id, 
-          action, 
-          rejectionReason: action === 'REJECTED' ? 'Missing room assets detected during baseline audit.' : undefined,
-          missingAssetsStr: action === 'REJECTED' ? flaggedAsset : undefined 
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        alert(`Error: ${data.error || data.message || 'Failed to update clearance.'}`);
-        return;
-      }
-      setAuditModal(null);
-      router.refresh();
-    } catch (e: any) {
-      alert(`Network error: ${e.message}`);
-    }
-  };
 
   // ── Master Asset Registration Logic ──
   const loadRoomData = async (bNum: number, rNum: number) => {
@@ -452,30 +457,62 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
                 const h = b.health;
                 const borderClass = h.tier === 'CRITICAL' ? 'border-red-500/30' : h.tier === 'MEDIUM' ? 'border-amber-500/30' : 'border-emerald-500/30';
                 const bgClass = h.tier === 'CRITICAL' ? 'bg-red-950/10' : h.tier === 'MEDIUM' ? 'bg-amber-950/10' : 'bg-emerald-950/10';
+                const isExpanded = expandedBlockIds.includes(b.id);
                 return (
-                  <div key={b.id} className={`rounded-xl border ${borderClass} ${bgClass} p-4`}>
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div className="min-w-[140px]">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span>{h.tier === 'CRITICAL' ? '🔴' : h.tier === 'MEDIUM' ? '🟡' : '🟢'}</span>
-                          <span className="font-bold text-sm">Block {b.number} · {b.name}</span>
-                        </div>
-                        <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden">
-                          <div className="h-full rounded-full" style={{ width: `${h.score}%`, background: h.tier === 'CRITICAL' ? '#ef4444' : h.tier === 'MEDIUM' ? '#f59e0b' : '#10b981' }} />
-                        </div>
-                        <span className="text-xs font-mono" style={{ color: h.tier === 'CRITICAL' ? '#ef4444' : h.tier === 'MEDIUM' ? '#f59e0b' : '#10b981' }}>{h.score}/100</span>
+                  <div key={b.id} className={`rounded-xl border ${borderClass} ${bgClass} overflow-hidden transition-all duration-200`}>
+                    {/* Collapsible Header Row */}
+                    <div 
+                      className="flex items-center justify-between p-4 cursor-pointer select-none hover:bg-white/5 transition-all"
+                      onClick={() => toggleBlockExpanded(b.id)}
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className="text-lg">{h.tier === 'CRITICAL' ? '🔴' : h.tier === 'MEDIUM' ? '🟡' : '🟢'}</span>
+                        <span className="font-bold text-sm text-slate-200">Block {b.number} · {b.name}</span>
+                        <span className="text-xs px-2 py-0.5 rounded-full font-semibold" style={{
+                          background: h.tier === 'CRITICAL' ? 'rgba(239,68,68,0.2)' : h.tier === 'MEDIUM' ? 'rgba(245,158,11,0.2)' : 'rgba(16,185,129,0.2)',
+                          color: h.tier === 'CRITICAL' ? '#f87171' : h.tier === 'MEDIUM' ? '#fbbf24' : '#34d399'
+                        }}>
+                          {h.tier}
+                        </span>
                       </div>
-                      <div className="text-xs text-slate-300 flex-1 max-w-xs">{h.aiVerdict}</div>
-                      <div className="text-xs text-slate-400 rounded-lg bg-black/30 border border-white/10 p-2 max-w-xs">
-                        <span className="font-bold text-white">📋 </span>{h.controlSuggestion}
+                      <div className="flex items-center gap-4">
+                        <span className="font-bold text-xs text-slate-300">
+                          Satisfaction: <span className="font-black font-mono text-sm" style={{ color: h.tier === 'CRITICAL' ? '#ef4444' : h.tier === 'MEDIUM' ? '#f59e0b' : '#10b981' }}>{h.score}/100</span>
+                        </span>
+                        <span className="text-sec font-mono text-xs">
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
                       </div>
                     </div>
+
+                    {/* Collapsible Details Content */}
+                    {isExpanded && (
+                      <div className="border-t border-white/5 p-4 bg-black/20 text-xs text-sec space-y-4 animate-in">
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <div>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-2">Satisfaction score bar</p>
+                            <div className="h-2 w-full rounded-full bg-slate-800 overflow-hidden mb-1">
+                              <div className="h-full rounded-full" style={{ width: `${h.score}%`, background: h.tier === 'CRITICAL' ? '#ef4444' : h.tier === 'MEDIUM' ? '#f59e0b' : '#10b981' }} />
+                            </div>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">AI Verdict</p>
+                            <p className="text-slate-300">{h.aiVerdict}</p>
+                          </div>
+                        </div>
+                        <div className="rounded-lg bg-black/30 border border-white/10 p-3">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">📋 Suggested Action</p>
+                          <p className="text-slate-200">{h.controlSuggestion}</p>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
           </div>
         </section>
       )}
+
 
       <div className="grid-2 gap-6">
         {/* Emergency Tickets Queue */}
@@ -485,41 +522,83 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
             <span className="badge badge-red">{activeTickets.length}</span>
           </div>
           <div className="card-p">
-            {!activeShift && activeTickets.length > 0 && (
-              <div className="alert alert-warn mb-4">You must start your shift to resolve tickets.</div>
-            )}
             {activeTickets.length === 0 ? (
               <p className="text-sec text-sm text-center py-8">No active emergencies across your managed blocks.</p>
             ) : (
               <div className="flex flex-col gap-3">
-                {activeTickets.map((t: any) => (
-                  <div key={t.id} className="card" style={{ padding: '12px 16px', background: 'var(--bg-raised)' }}>
-                    <div className="flex justify-between items-start mb-2">
-                      <div className="flex items-center gap-2">
-                        <span style={{ fontSize: '1.2rem' }}>{CATEGORY_ICONS[t.category]}</span>
-                        <span className="font-bold text-sm">{t.category}</span>
-                        <span className={`badge ${t.status === 'OPEN' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: '0.6rem' }}>{t.status.replace('_', ' ')}</span>
+                {activeTickets.map((t: any) => {
+                  const isExpanded = expandedTicketIds.includes(t.id);
+                  return (
+                    <div 
+                      key={t.id} 
+                      className="rounded-xl border overflow-hidden transition-all duration-200" 
+                      style={{ borderColor: 'var(--border)', background: 'var(--bg-raised)' }}
+                    >
+                      {/* Sleek Header Baseline */}
+                      <div 
+                        className="flex items-center justify-between p-4 cursor-pointer select-none hover:bg-white/5 transition-all"
+                        onClick={() => toggleTicketExpanded(t.id)}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span style={{ fontSize: '1.1rem' }}>{CATEGORY_ICONS[t.category]}</span>
+                          <span className="font-bold text-sm text-slate-200">{t.category}</span>
+                          <span className={`badge ${t.status === 'OPEN' ? 'badge-red' : 'badge-amber'}`} style={{ fontSize: '0.55rem' }}>
+                            {t.status.replace('_', ' ')}
+                          </span>
+                          <span className="text-xs text-muted">• Block {t.dormBlock.name}</span>
+                        </div>
+                        <span className="text-sec font-mono text-xs">
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
                       </div>
-                      <span className="text-xs font-bold text-accent">Block {t.dormBlock.name}</span>
+
+                      {/* Isolated Dropdown Content */}
+                      {isExpanded && (
+                        <div className="border-t border-white/5 p-4 bg-black/20 text-xs text-sec space-y-4 animate-in">
+                          <div>
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Student & Room Details</p>
+                            <div className="p-3 rounded bg-white/5 border border-white/5 space-y-1 mb-3 text-slate-300">
+                              <p>Student Name: <span className="font-bold text-slate-100">{t.student.name}</span></p>
+                              <p>Student ID: <span className="font-mono text-slate-100">{t.student.studentId}</span></p>
+                              <p>Dormitory Room: <span className="font-mono text-slate-100">Room {t.student.room?.roomNumber}</span></p>
+                            </div>
+                            
+                            <p className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Issue Description</p>
+                            <p className="text-sm text-slate-200 leading-relaxed bg-white/5 p-3 rounded-lg border border-white/5">
+                              {t.description || 'No description provided'}
+                            </p>
+                          </div>
+                          
+                          <div className="flex items-center justify-between pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+                            <span className="font-mono text-[10px] text-muted">Submitted: {new Date(t.createdAt).toLocaleTimeString()}</span>
+                            <div className="flex gap-2">
+                              {t.status === 'OPEN' && (
+                                <button 
+                                  className="btn btn-sm btn-ghost" style={{ color: 'var(--amber)', border: '1px solid rgba(245, 158, 11, 0.2)' }}
+                                  onClick={() => updateTicketStatus(t.id, 'IN_PROGRESS')} disabled={updatingTicket === t.id}
+                                >Mark In Progress</button>
+                              )}
+                              <button 
+                                className="btn btn-sm btn-success" style={{ background: 'rgba(16, 185, 129, 0.2)', border: '1px solid var(--green)', color: 'var(--green)' }}
+                                onClick={() => { if(confirm('Approve and resolve this emergency ticket?')) updateTicketStatus(t.id, 'RESOLVED'); }} 
+                                disabled={updatingTicket === t.id}
+                              >
+                                Approve & Resolve
+                              </button>
+                              <button 
+                                className="btn btn-sm btn-danger" style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid var(--red)', color: 'var(--red)' }}
+                                onClick={() => { if(confirm('Reject and cancel this emergency ticket?')) updateTicketStatus(t.id, 'REJECTED'); }} 
+                                disabled={updatingTicket === t.id}
+                              >
+                                Reject & Dismiss
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    <p className="text-sm text-sec mb-3">{t.description || 'No description provided'}</p>
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-                      <span className="text-xs font-mono text-muted">Room {t.student.room?.roomNumber} • {t.student.name.split(' ')[0]}</span>
-                      <div className="flex gap-2">
-                        {t.status === 'OPEN' && (
-                          <button 
-                            className="btn btn-sm btn-ghost" style={{ color: 'var(--amber)' }}
-                            onClick={() => updateTicketStatus(t.id, 'IN_PROGRESS')} disabled={updatingTicket === t.id}
-                          >Mark In Progress</button>
-                        )}
-                        <button 
-                          className="btn btn-sm btn-ghost" style={{ color: 'var(--green)' }}
-                          onClick={() => updateTicketStatus(t.id, 'RESOLVED')} disabled={updatingTicket === t.id}
-                        >Resolve</button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
 
@@ -539,9 +618,14 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
                     {resolvedTickets.map((t: any) => (
                       <div key={t.id} className="flex justify-between items-center text-sm p-3 rounded" style={{ background: 'var(--bg-raised)', opacity: 0.7 }}>
                         <div className="flex items-center gap-2">
-                          <span className="text-green-500">✓</span>
+                          {t.status === 'RESOLVED' ? (
+                            <span className="text-green-500 font-bold">✓</span>
+                          ) : (
+                            <span className="text-red-500 font-bold">✗</span>
+                          )}
                           <span className="font-bold">{t.category}</span>
                           <span className="text-xs text-sec">• Room {t.student.room?.roomNumber}</span>
+                          <span className="text-[10px] text-muted font-bold uppercase">({t.status})</span>
                         </div>
                         <span className="text-xs text-muted">{new Date(t.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                       </div>
@@ -553,7 +637,7 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
           </div>
         </div>
 
-        {/* Pending Gate Clearances */}
+        {/* Streamlined Universal Clearance Queue */}
         <div className="card">
           <div className="card-header flex items-center justify-between">
             <h3 className="flex items-center gap-2">
@@ -568,56 +652,127 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
             <span className="badge badge-amber">{activeClearances.length}</span>
           </div>
           <div className="card-p">
-            {!activeShift && activeClearances.length > 0 && (
-              <div className="alert alert-warn mb-4">You must start your shift to perform room audits.</div>
-            )}
             {activeClearances.length === 0 ? (
               <p className="text-sec text-sm text-center py-8">No pending clearances.</p>
             ) : (
               <div className="flex flex-col gap-3">
-                {activeClearances.map((c: any) => (
-                  <div key={c.id} className="card" style={{ padding: '16px', background: 'var(--bg-raised)' }}>
-                    <div className="flex justify-between items-start mb-3">
-                      <div>
-                        <div className="font-bold text-sm">{c.student.name} <span className="text-xs text-blue-400 ml-2 font-mono bg-blue-900/20 px-2 py-0.5 rounded border border-blue-500/20">{c.student.studentId}</span></div>
-                        <div className="text-xs font-mono text-muted mt-1">Room {c.student.room?.roomNumber}</div>
-                      </div>
-                      <span className="text-xs text-muted">{new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-
-                    <button 
-                      className="btn btn-sm btn-primary btn-block mt-2" 
-                      onClick={() => openAuditModal(c)}
+                {activeClearances.map((c: any) => {
+                  const isExpanded = expandedClearanceIds.includes(c.id);
+                  return (
+                    <div 
+                      key={c.id} 
+                      className="rounded-xl border overflow-hidden transition-all duration-200" 
+                      style={{ borderColor: 'var(--border)', background: 'var(--bg-raised)' }}
                     >
-                      Perform Baseline Audit
-                    </button>
-                  </div>
-                ))}
+                      {/* Streamlined Accordion Header Row */}
+                      <div 
+                        className="flex items-center justify-between p-4 cursor-pointer select-none hover:bg-white/5 transition-all"
+                        onClick={() => toggleClearanceExpanded(c.id)}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="font-bold text-sm text-slate-200">{c.student.name}</span>
+                          <span className="text-xs text-blue-400 font-mono bg-blue-900/20 px-2 py-0.5 rounded border border-blue-500/20">
+                            {c.student.studentId}
+                          </span>
+                          <span className="text-xs text-muted font-mono">
+                            {new Date(c.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </span>
+                        </div>
+                        <span className="text-sec font-mono text-xs ml-2 flex-shrink-0">
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
+                      </div>
+
+                      {/* Streamlined Dropdown Content */}
+                      {isExpanded && (() => {
+                        let items: any = null;
+                        try { items = c.personalItems ? JSON.parse(c.personalItems) : null; } catch {}
+                        const isProcessing = processingClearanceId === c.id;
+                        
+                        const clothesVal = c.clothesCount !== null && c.clothesCount !== undefined ? c.clothesCount : (items?.clothes ?? 0);
+                        const trousersVal = c.trousersCount !== null && c.trousersCount !== undefined ? c.trousersCount : (items?.trousers ?? 0);
+                        const sweatersVal = c.sweatersCount !== null && c.sweatersCount !== undefined ? c.sweatersCount : (items?.sweaters ?? items?.jackets ?? 0);
+
+                        return (
+                          <div className="border-t border-white/5 p-4 bg-black/20 text-xs text-sec space-y-4 animate-in">
+                            <div className="p-3 rounded border border-amber-500/25 bg-amber-950/20">
+                              <p className="text-[10px] text-amber-400 font-bold uppercase tracking-wider mb-2 flex items-center gap-1">🎒 Declared Belongings</p>
+                              <div className="flex flex-col gap-1 text-xs text-slate-300">
+                                <div className="flex justify-between"><span>Clothes:</span><span className="font-bold text-slate-100">{clothesVal}</span></div>
+                                <div className="flex justify-between"><span>Trousers:</span><span className="font-bold text-slate-100">{trousersVal}</span></div>
+                                <div className="flex justify-between"><span>Sweaters:</span><span className="font-bold text-slate-100">{sweatersVal}</span></div>
+                                {items?.otherItems?.map((item: any, i: number) => (
+                                  <div key={i} className="flex justify-between"><span>{item.name}:</span><span className="font-bold text-blue-300">{item.count}</span></div>
+                                ))}
+                              </div>
+                            </div>
+
+                            {/* Direct Approval Actions (Always clickable immediately) */}
+                            <div className="flex gap-2 pt-1">
+                              <button
+                                className="flex-1 btn btn-sm"
+                                style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid var(--green)', color: 'var(--green)', fontWeight: 700 }}
+                                disabled={isProcessing}
+                                onClick={() => { if (confirm(`Approve clearance for ${c.student.name}?`)) handleClearanceAction(c.id, 'APPROVED'); }}
+                              >
+                                {isProcessing ? '…' : '✓ Approve Clearance'}
+                              </button>
+                              <button
+                                className="flex-1 btn btn-sm"
+                                style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid var(--red)', color: 'var(--red)', fontWeight: 700 }}
+                                disabled={isProcessing}
+                                onClick={() => onRejectClearance(c.id)}
+                              >
+                                {isProcessing ? '…' : '✗ Reject Request'}
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  );
+                })}
               </div>
             )}
 
-            {/* Clearances History */}
+            {/* Collapsible Past Clearance History Accordion Panel */}
             {resolvedClearances.length > 0 && (
               <div className="mt-8 border-t border-white/10 pt-4">
                 <button 
                   className="flex justify-between items-center w-full text-left hover:text-white transition-colors"
                   onClick={() => setShowClearanceHistory(!showClearanceHistory)}
                 >
-                  <span className="text-xs text-sec uppercase tracking-wider font-bold">Recent Clearances ({resolvedClearances.length})</span>
+                  <span className="text-xs text-sec uppercase tracking-wider font-bold">📋 Past Clearance History ({resolvedClearances.length})</span>
                   <span className="text-sec text-xs">{showClearanceHistory ? '▼' : '▶'}</span>
                 </button>
                 
                 {showClearanceHistory && (
                   <div className="flex flex-col gap-2 mt-4">
                     {resolvedClearances.map((c: any) => (
-                      <div key={c.id} className="flex justify-between items-center text-sm p-3 rounded" style={{ background: 'var(--bg-raised)', opacity: 0.7 }}>
-                        <div className="flex flex-col">
-                          <span className="font-bold">{c.student.name}</span>
-                          <span className="text-xs text-sec">Room {c.student.room?.roomNumber} • {new Date(c.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      <div key={c.id} className="flex flex-col gap-2 p-3 rounded" style={{ background: 'var(--bg-raised)', opacity: 0.85 }}>
+                        <div className="flex justify-between items-start">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-slate-200">{c.student.name}</span>
+                            <span className="text-xs text-slate-400">
+                              Room {c.student.room?.roomNumber || 'N/A'} • {new Date(c.updatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <span className={`badge ${
+                            c.status === 'APPROVED' ? 'badge-green' :
+                            c.status === 'RELEASED' ? 'badge-blue' :
+                            c.status === 'REJECTED' ? 'badge-red' : 'badge-muted'
+                          }`} style={{ fontSize: '0.65rem' }}>
+                            {c.status.replace(/_/g, ' ')}
+                          </span>
                         </div>
-                        <span className={`badge ${c.status === 'APPROVED' ? 'badge-green' : 'badge-red'}`} style={{ fontSize: '0.6rem' }}>
-                          {c.status.replace(/_/g, ' ')}
-                        </span>
+                        {c.status === 'APPROVED' && c.departureId && (
+                          <div className="flex items-center justify-between bg-emerald-950/20 border border-emerald-500/20 rounded p-2 mt-1">
+                            <span className="text-[10px] text-emerald-400 font-bold uppercase tracking-wider">🚪 Exit Code Generated</span>
+                            <span className="text-xs font-mono font-bold text-emerald-300 bg-emerald-900/30 px-2 py-0.5 rounded border border-emerald-500/30">
+                              {c.departureId}
+                            </span>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -628,89 +783,6 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
         </div>
       </div>
 
-      {/* Audit Modal (for clearances) */}
-      {auditModal && (
-        <div className="modal-backdrop fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.8)', backdropFilter: 'blur(4px)' }}>
-          <div className="card card-p w-full max-w-md animate-in" style={{ border: '1px solid var(--border)' }}>
-            <h2 className="mb-1">Room Baseline Audit</h2>
-            <p className="text-sec text-sm mb-4">Room {auditModal.student.room?.roomNumber} • {auditModal.student.name}</p>
-            
-            <div className="mb-6 p-3 rounded flex items-center justify-between" style={{ background: 'linear-gradient(135deg, rgba(59,130,246,0.1) 0%, rgba(37,99,235,0.05) 100%)', border: '1px solid rgba(59,130,246,0.2)' }}>
-              <span className="text-xs text-blue-300"><strong>Security Check:</strong> Verify student's physical ID card matches:</span>
-              <span className="font-mono text-lg font-bold text-blue-400 bg-black/40 px-3 py-1 rounded shadow-inner border border-blue-500/30">{auditModal.student.studentId}</span>
-            </div>
-
-            {loadingAssets ? (
-              <p className="text-center py-8 text-sec"><span className="spinner"></span> Loading Room Data...</p>
-            ) : (
-              <>
-                {auditModal.personalItems && (
-                  <div className="mb-6 p-4 rounded border border-amber-500/30 bg-amber-950/20">
-                    <p className="text-xs text-amber-500 font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
-                      <span className="text-lg">🎒</span> Declared Personal Belongings
-                    </p>
-                    {(() => {
-                      try {
-                        const items = JSON.parse(auditModal.personalItems);
-                        return (
-                          <div className="flex flex-col gap-2 text-sm">
-                            <div className="flex justify-between items-center border-b border-white/5 pb-1"><span className="text-sec">Trousers:</span> <span className="font-bold">{items.trousers || 0}</span></div>
-                            <div className="flex justify-between items-center border-b border-white/5 pb-1"><span className="text-sec">Sweaters / Jackets:</span> <span className="font-bold">{items.jackets || 0}</span></div>
-                            <div className="flex justify-between items-center border-b border-white/5 pb-1"><span className="text-sec">Laptops / Electronics:</span> <span className="font-bold">{items.electronics || 0}</span></div>
-                            {items.otherItems && items.otherItems.map((item: any, i: number) => (
-                              <div key={i} className="flex justify-between items-center border-b border-white/5 pb-1"><span className="text-sec">{item.name}:</span> <span className="font-bold text-blue-300">{item.count}</span></div>
-                            ))}
-                          </div>
-                        );
-                      } catch (e) {
-                        return <div className="text-xs text-sec">No extra items declared or error parsing.</div>;
-                      }
-                    })()}
-                  </div>
-                )}
-
-                <div className="mb-6 p-4 rounded" style={{ background: 'var(--bg-raised)' }}>
-                  <p className="text-xs text-sec font-bold uppercase tracking-wider mb-3 flex items-center gap-2">
-                    <span className="text-lg">📋</span> Registered Baseline Inventory
-                  </p>
-                  {roomAssets.length === 0 ? (
-                    <div className="alert alert-warn p-3 text-xs">
-                      No baseline assets registered for this room! Ensure room is manually inspected carefully.
-                    </div>
-                  ) : (
-                    roomAssets.map(asset => (
-                      <div key={asset.id} className="flex justify-between items-center mb-2 text-sm border-b pb-2 last:border-0 last:pb-0" style={{ borderColor: 'var(--border)' }}>
-                        <span className="font-bold">{asset.type}</span>
-                        <span className="font-mono text-sec">Qty: {asset.quantity}</span>
-                      </div>
-                    ))
-                  )}
-                </div>
-
-                <div className="mb-6">
-                  <label className="form-label text-red">Flag Missing Asset (If any)</label>
-                  <input 
-                    className="form-input w-full" 
-                    placeholder="e.g. 1 Chair missing" 
-                    value={flaggedAsset}
-                    onChange={e => setFlaggedAsset(e.target.value)}
-                  />
-                  <p className="text-xs text-muted mt-1">If filled, clearance will be REJECTED.</p>
-                </div>
-
-                <div className="flex gap-3">
-                  <button className="btn btn-ghost flex-1" onClick={() => setAuditModal(null)}>Cancel</button>
-                  {flaggedAsset ? (
-                    <button className="btn btn-danger flex-1" onClick={() => submitAudit('REJECTED')}>Reject & Flag</button>
-                  ) : (
-                    <button className="btn btn-primary flex-1" onClick={() => submitAudit('APPROVED')} style={{ background: 'var(--green)', color: '#000' }}>Approve Audit</button>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
