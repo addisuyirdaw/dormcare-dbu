@@ -66,6 +66,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       valid: true,
+      id: request.id,
+      status: request.status,
       student: {
         name: student.name,
         studentId: student.studentId,
@@ -76,6 +78,10 @@ export async function GET(req: NextRequest) {
       approvedAt: request.approvedAt,
       departureId: request.departureId,
       verificationToken: request.verificationToken,
+      clothesCount: request.clothesCount,
+      trousersCount: request.trousersCount,
+      sweatersCount: request.sweatersCount,
+      otherAssets: request.otherAssets,
       items,
     });
 

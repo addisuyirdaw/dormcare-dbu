@@ -54,18 +54,52 @@ export async function GET(req: NextRequest) {
   if (user.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
 
   try {
-    const shifts = await prisma.shiftRegistry.findMany({
-      include: {
-        staff: { select: { id: true, name: true, phone: true } },
-        blocks: { select: { id: true, number: true, name: true } },
-        primaryBlock: { select: { id: true, name: true } }
-      },
-      orderBy: { startTime: 'desc' },
-      take: 50
-    });
+    const [shifts, staffMembers] = await Promise.all([
+      prisma.shiftRegistry.findMany({
+        include: {
+          staff: { select: { id: true, name: true, phone: true, email: true } },
+          blocks: { select: { id: true, number: true, name: true } },
+          primaryBlock: { select: { id: true, name: true } }
+        },
+        orderBy: { startTime: 'desc' },
+        take: 50
+      }),
+      prisma.user.findMany({
+        where: { role: 'STAFF' },
+        select: { id: true, name: true, phone: true, email: true },
+        orderBy: { name: 'asc' }
+      })
+    ]);
 
-    return NextResponse.json(shifts);
+    return NextResponse.json({ shifts, staffMembers });
   } catch (error: any) {
     return NextResponse.json({ error: 'Failed to fetch shifts' }, { status: 500 });
   }
 }
+
+export async function DELETE(req: NextRequest) {
+  const session = await auth();
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  
+  const user = session.user as any;
+  if (user.role !== 'ADMIN') return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+
+  try {
+    const { searchParams } = new URL(req.url);
+    const shiftId = searchParams.get('id');
+    
+    if (!shiftId) {
+      return NextResponse.json({ error: 'Shift ID is required' }, { status: 400 });
+    }
+
+    await prisma.shiftRegistry.delete({
+      where: { id: shiftId }
+    });
+
+    return NextResponse.json({ success: true, message: 'Shift canceled successfully' });
+  } catch (error: any) {
+    console.error('Error deleting shift:', error);
+    return NextResponse.json({ error: error.message || 'Failed to cancel shift' }, { status: 500 });
+  }
+}
+

@@ -26,6 +26,7 @@
     "leaflet": "^1.9.4",
     "next": "16.2.6",
     "next-auth": "^5.0.0-beta.31",
+    "orthodoxconnect": "file:../Telegram Desktop/EthiopianOrthodox Website",
     "prisma": "^5.15.0",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
@@ -34,6 +35,5 @@
     "react-qr-code": "^2.0.21",
     "typescript": "^5.9.3",
     "uuid": "^14.0.0"
-  },
-  "devDependencies": {}
+  }
 }

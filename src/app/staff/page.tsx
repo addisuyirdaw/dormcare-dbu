@@ -24,10 +24,17 @@ export default async function StaffPage() {
   const hasBlockScope = managedBlockIds.length > 0;
 
   // Staff has EQUAL campus-wide power — fetch ALL blocks/tickets/clearances
-  const [activeShift, tickets, pendingClearances, resolvedToday, allBlocks] = await Promise.all([
+  const [activeShift, myShifts, tickets, pendingClearances, resolvedToday, allBlocks] = await Promise.all([
     prisma.shiftRegistry.findFirst({
       where: { staffId: user.id, isActive: true },
       orderBy: { checkedInAt: 'desc' },
+      include: { blocks: { select: { id: true, name: true, number: true } } },
+    }),
+    prisma.shiftRegistry.findMany({
+      where: { staffId: user.id },
+      include: { blocks: { select: { id: true, name: true, number: true } } },
+      orderBy: { startTime: 'desc' },
+      take: 10,
     }),
     // Tickets: globally across the entire campus
     prisma.emergencyTicket.findMany({
@@ -95,6 +102,7 @@ export default async function StaffPage() {
       <StaffDashboardClient
         user={{ ...user, dormBlock: dbUser?.dormBlock, managedBlocks: dbUser?.managedBlocks }}
         activeShift={JSON.parse(JSON.stringify(activeShift))}
+        myShifts={JSON.parse(JSON.stringify(myShifts))}
         tickets={JSON.parse(JSON.stringify(tickets))}
         pendingClearances={JSON.parse(JSON.stringify(pendingClearances))}
         resolvedToday={resolvedToday}

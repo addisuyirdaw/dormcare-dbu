@@ -16,7 +16,8 @@ export default async function AdminShiftsPage() {
   const [staffMembers, blocks, initialShifts] = await Promise.all([
     prisma.user.findMany({
       where: { role: 'STAFF' },
-      select: { id: true, name: true, phone: true }
+      select: { id: true, name: true, phone: true, email: true },
+      orderBy: { name: 'asc' }
     }),
     prisma.dormBlock.findMany({
       orderBy: { number: 'asc' },
@@ -24,7 +25,7 @@ export default async function AdminShiftsPage() {
     }),
     prisma.shiftRegistry.findMany({
       include: {
-        staff: { select: { id: true, name: true, phone: true } },
+        staff: { select: { id: true, name: true, phone: true, email: true } },
         blocks: { select: { id: true, number: true, name: true } },
         primaryBlock: { select: { id: true, name: true } }
       },

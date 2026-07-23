@@ -51,11 +51,14 @@ export default function Navbar({ userName, role = 'STUDENT', dormBlock, onDuty }
             /* Staff/Admin Dropdown */
             <details style={{ position: 'relative' }}>
               <summary style={{ cursor: 'pointer', fontSize: '14px', fontWeight: 600, color: '#334155', textTransform: 'uppercase' }}>Tasks</summary>
-              <ul style={{ position: 'absolute', top: '100%', left: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px', minWidth: '150px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+              <ul style={{ position: 'absolute', top: '100%', left: 0, background: '#fff', border: '1px solid #e2e8f0', borderRadius: '4px', padding: '8px', minWidth: '180px', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
                 <li><Link href="/staff" style={{ fontSize: '14px', color: '#334155', textDecoration: 'none' }}>Pending</Link></li>
                 <li><Link href="/staff" style={{ fontSize: '14px', color: '#334155', textDecoration: 'none' }}>Progress</Link></li>
                 <li><Link href="/staff" style={{ fontSize: '14px', color: '#334155', textDecoration: 'none' }}>Already Resolved</Link></li>
                 <li><Link href="/staff" style={{ fontSize: '14px', color: '#334155', textDecoration: 'none' }}>Clearance</Link></li>
+                <li style={{ marginTop: '4px', borderTop: '1px solid #e2e8f0', paddingTop: '4px' }}>
+                  <Link href="/gate" style={{ fontSize: '14px', fontWeight: 700, color: '#4f46e5', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>🚪 Gate Control</Link>
+                </li>
               </ul>
             </details>
           ) : null}
@@ -117,6 +120,9 @@ export default function Navbar({ userName, role = 'STUDENT', dormBlock, onDuty }
       <li><Link href="/staff" style={{ fontSize: '14px', color: '#334155', textDecoration: 'none' }}>Progress</Link></li>
       <li><Link href="/staff" style={{ fontSize: '14px', color: '#334155', textDecoration: 'none' }}>Already Resolved</Link></li>
       <li><Link href="/staff" style={{ fontSize: '14px', color: '#334155', textDecoration: 'none' }}>Clearance</Link></li>
+      <li style={{ marginTop: '4px', borderTop: '1px solid #e2e8f0', paddingTop: '4px' }}>
+        <Link href="/gate" style={{ fontSize: '14px', fontWeight: 700, color: '#4f46e5', textDecoration: 'none', display: 'flex', alignItems: 'center', gap: '6px' }}>🚪 Gate Control</Link>
+      </li>
     </ul>
   </details>
 )}

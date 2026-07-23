@@ -40,12 +40,18 @@ export async function GET(
 
   return NextResponse.json({
     valid: true,
+    id: request.id,
+    status: request.status,
     student: request.student,
     approvedBy: request.approvedBy,
     approvedAt: request.approvedAt,
     tokenExpiresAt: request.tokenExpiresAt,
     departureId: request.departureId,
     verificationToken: request.verificationToken,
+    clothesCount: request.clothesCount,
+    trousersCount: request.trousersCount,
+    sweatersCount: request.sweatersCount,
+    otherAssets: request.otherAssets,
     items,
   });
 }

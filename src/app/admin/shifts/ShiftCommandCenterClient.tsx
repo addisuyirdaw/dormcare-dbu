@@ -1,15 +1,22 @@
 'use client';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
 
 // Dynamically import the map component to prevent SSR errors with Leaflet
 const StaffLocationMap = dynamic(() => import('@/components/StaffLocationMap'), { ssr: false });
 
-export default function ShiftCommandCenterClient({ staffMembers, blocks, initialShifts }: any) {
+const formatLocalDatetime = (date: Date) => {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+export default function ShiftCommandCenterClient({ staffMembers = [], blocks = [], initialShifts = [] }: any) {
   const router = useRouter();
   const [shifts, setShifts] = useState<any[]>(initialShifts || []);
+  const [staffList, setStaffList] = useState<any[]>(staffMembers || []);
   const [loading, setLoading] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showMap, setShowMap] = useState(true);
@@ -19,22 +26,30 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
   const [shiftName, setShiftName] = useState('Standard Shift');
   const [selectedBlocks, setSelectedBlocks] = useState<string[]>([]);
   
-  // Default to today 8 AM - 4 PM
+  // Default start/end times formatted correctly to local timezone
   const now = new Date();
-  const today8AM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 0).toISOString().slice(0, 16);
-  const today4PM = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0).toISOString().slice(0, 16);
-  
-  const [startTime, setStartTime] = useState(today8AM);
-  const [endTime, setEndTime] = useState(today4PM);
+  const defaultStart = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 8, 0);
+  const defaultEnd = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 0);
+
+  const [startTime, setStartTime] = useState(formatLocalDatetime(defaultStart));
+  const [endTime, setEndTime] = useState(formatLocalDatetime(defaultEnd));
+
+  const fetchUpdatedData = async () => {
+    try {
+      const res = await fetch('/api/admin/shifts');
+      if (res.ok) {
+        const data = await res.json();
+        if (data.shifts && Array.isArray(data.shifts)) setShifts(data.shifts);
+        else if (Array.isArray(data)) setShifts(data);
+
+        if (data.staffMembers && Array.isArray(data.staffMembers)) setStaffList(data.staffMembers);
+      }
+    } catch (e) {}
+  };
 
   // Auto-refresh shifts every 30 seconds for live tracking
   useEffect(() => {
-    const interval = setInterval(async () => {
-      try {
-        const updated = await fetch('/api/admin/shifts').then(r => r.json());
-        if (Array.isArray(updated)) setShifts(updated);
-      } catch (e) {}
-    }, 30000);
+    const interval = setInterval(fetchUpdatedData, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -44,11 +59,56 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
     );
   };
 
+  const applyPreset = (presetType: 'MORNING' | 'EVENING' | 'NIGHT' | 'FULL') => {
+    const baseDate = startTime ? new Date(startTime) : new Date();
+    const y = baseDate.getFullYear();
+    const m = baseDate.getMonth();
+    const d = baseDate.getDate();
+
+    let startD: Date;
+    let endD: Date;
+    let name = 'Standard Shift';
+
+    switch (presetType) {
+      case 'MORNING':
+        startD = new Date(y, m, d, 8, 0);
+        endD = new Date(y, m, d, 16, 0);
+        name = 'Morning Shift (08:00 - 16:00)';
+        break;
+      case 'EVENING':
+        startD = new Date(y, m, d, 16, 0);
+        endD = new Date(y, m, d, 0, 0);
+        endD.setDate(endD.getDate() + 1); // Next day midnight
+        name = 'Evening Shift (16:00 - 00:00)';
+        break;
+      case 'NIGHT':
+        startD = new Date(y, m, d, 0, 0);
+        endD = new Date(y, m, d, 8, 0);
+        name = 'Night Shift (00:00 - 08:00)';
+        break;
+      case 'FULL':
+        startD = new Date(y, m, d, 0, 0);
+        endD = new Date(y, m, d, 23, 59);
+        name = 'Full Day Duty (24h)';
+        break;
+    }
+
+    setStartTime(formatLocalDatetime(startD));
+    setEndTime(formatLocalDatetime(endD));
+    setShiftName(name);
+  };
+
   const handleAssignShift = async () => {
     if (!staffId || selectedBlocks.length === 0 || !startTime || !endTime) {
-      setError('Please fill out all fields and select at least one block.');
+      setError('Please select a proctor/staff member, fill out start/end times, and choose at least one block.');
       return;
     }
+
+    if (new Date(endTime) <= new Date(startTime)) {
+      setError('End time must be after the start time.');
+      return;
+    }
+
     setLoading(true);
     setError('');
     setSuccess('');
@@ -75,17 +135,52 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
       setStaffId('');
       setSelectedBlocks([]);
       
-      const updatedList = await fetch('/api/admin/shifts').then(r => r.json());
-      if (Array.isArray(updatedList)) setShifts(updatedList);
+      await fetchUpdatedData();
       router.refresh();
       
-      setTimeout(() => setSuccess(''), 3000);
+      setTimeout(() => setSuccess(''), 4000);
     } catch (err: any) {
       setError(err.message || 'Network error.');
     } finally {
       setLoading(false);
     }
   };
+
+  const handleCancelShift = async (shiftId: string) => {
+    if (!confirm('Are you sure you want to cancel this assigned shift?')) return;
+
+    setDeletingId(shiftId);
+    setError('');
+    setSuccess('');
+
+    try {
+      const res = await fetch(`/api/admin/shifts?id=${shiftId}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.error || 'Failed to cancel shift');
+      }
+
+      setSuccess('🗑️ Shift canceled successfully.');
+      await fetchUpdatedData();
+      router.refresh();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.message || 'Failed to cancel shift');
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
+  // Calculate shift duration in hours
+  const startD = startTime ? new Date(startTime) : null;
+  const endD = endTime ? new Date(endTime) : null;
+  const durationHours = startD && endD && endD > startD 
+    ? ((endD.getTime() - startD.getTime()) / (1000 * 60 * 60)).toFixed(1)
+    : null;
+
+  // Selected Proctor's existing scheduled shifts for availability checking
+  const selectedStaffShifts = staffId ? shifts.filter(s => s.staffId === staffId || s.staff?.id === staffId) : [];
+  const selectedStaffMember = staffList.find(s => s.id === staffId);
 
   // Live Status Badge Renderer
   const renderStatusBadge = (shift: any) => {
@@ -190,7 +285,7 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
               <div
                 className="flex flex-col items-center justify-center text-center gap-3"
                 style={{
-                  height: '420px',
+                  height: '350px',
                   background: 'rgba(99,102,241,0.03)',
                   border: '1px solid rgba(99,102,241,0.15)',
                   borderRadius: '12px',
@@ -216,33 +311,68 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
       <div className="grid-3 gap-6 mb-8">
         {/* SHIFT ASSIGNMENT INTERFACE */}
         <div className="card card-p" style={{ gridColumn: 'span 1' }}>
-          <h3 className="mb-4 text-accent border-b border-white/10 pb-2">📝 Assign New Shift</h3>
+          <h3 className="mb-4 text-accent border-b border-white/10 pb-2">📝 Assign Proctor Shift</h3>
           
           <div className="flex flex-col gap-4">
             <div>
-              <label className="form-label text-xs uppercase tracking-wider text-sec">Select Staff Member</label>
+              <label className="form-label text-xs uppercase tracking-wider text-sec">Select Registered Proctor</label>
               <select className="form-input w-full bg-black/40" value={staffId} onChange={e => setStaffId(e.target.value)}>
-                <option value="">-- Choose Staff --</option>
-                {staffMembers.map((s: any) => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.phone || 'No phone'})</option>
+                <option value="">-- Choose Registered Staff --</option>
+                {staffList.map((s: any) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} ({s.phone || s.email || 'Registered Staff'})
+                  </option>
                 ))}
               </select>
             </div>
 
+            {/* Availability Check Preview */}
+            {selectedStaffMember && (
+              <div className="p-3 bg-black/30 border border-primary/30 rounded text-xs flex flex-col gap-1">
+                <div className="font-bold text-primary flex justify-between items-center">
+                  <span>👤 {selectedStaffMember.name}</span>
+                  <span className="text-[10px] text-sec">{selectedStaffShifts.length} Shift(s) Scheduled</span>
+                </div>
+                {selectedStaffShifts.length > 0 ? (
+                  <div className="mt-1 max-h-24 overflow-y-auto flex flex-col gap-1">
+                    {selectedStaffShifts.map(s => (
+                      <div key={s.id} className="text-[10px] bg-white/5 p-1 rounded border border-white/10 flex justify-between">
+                        <span>🗓️ {new Date(s.startTime).toLocaleDateString()}</span>
+                        <span>{new Date(s.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(s.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-[10px] text-green-400 italic">✔ Available — No conflicting shifts scheduled.</div>
+                )}
+              </div>
+            )}
+
             <div>
-              <label className="form-label text-xs uppercase tracking-wider text-sec">Shift Name</label>
+              <label className="form-label text-xs uppercase tracking-wider text-sec">Shift Title / Description</label>
               <input 
                 type="text" 
                 className="form-input w-full bg-black/40" 
-                placeholder="e.g. Night Shift"
+                placeholder="e.g. Morning Proctor Shift"
                 value={shiftName}
                 onChange={e => setShiftName(e.target.value)}
               />
             </div>
 
+            {/* Quick Time Presets */}
+            <div>
+              <label className="form-label text-[10px] uppercase tracking-wider text-sec mb-1 block">Quick Time Presets</label>
+              <div className="flex flex-wrap gap-1">
+                <button type="button" onClick={() => applyPreset('MORNING')} className="btn btn-xs btn-ghost border border-white/10 text-[10px]">☀️ Morning (8-4)</button>
+                <button type="button" onClick={() => applyPreset('EVENING')} className="btn btn-xs btn-ghost border border-white/10 text-[10px]">🌆 Evening (4-12)</button>
+                <button type="button" onClick={() => applyPreset('NIGHT')} className="btn btn-xs btn-ghost border border-white/10 text-[10px]">🌙 Night (12-8)</button>
+                <button type="button" onClick={() => applyPreset('FULL')} className="btn btn-xs btn-ghost border border-white/10 text-[10px]">📆 24 Hours</button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="form-label text-xs uppercase tracking-wider text-sec">Start Time</label>
+                <label className="form-label text-xs uppercase tracking-wider text-sec">Start Date & Time</label>
                 <input 
                   type="datetime-local" 
                   className="form-input w-full bg-black/40 text-xs" 
@@ -251,7 +381,7 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
                 />
               </div>
               <div>
-                <label className="form-label text-xs uppercase tracking-wider text-sec">End Time</label>
+                <label className="form-label text-xs uppercase tracking-wider text-sec">End Date & Time</label>
                 <input 
                   type="datetime-local" 
                   className="form-input w-full bg-black/40 text-xs" 
@@ -261,13 +391,21 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
               </div>
             </div>
 
+            {durationHours && (
+              <div className="text-[11px] text-sec flex justify-between px-1">
+                <span>Shift Duration:</span>
+                <span className="font-mono text-accent font-bold">{durationHours} Hours</span>
+              </div>
+            )}
+
             <div>
               <label className="form-label text-xs uppercase tracking-wider text-sec mb-2 block">Assigned Blocks</label>
               <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border border-white/10 rounded bg-black/20">
                 {blocks.map((b: any) => (
                   <button
                     key={b.id}
-                    className={`badge border transition-colors cursor-pointer ${selectedBlocks.includes(b.id) ? 'bg-primary text-black border-primary' : 'bg-transparent text-sec border-white/10 hover:border-white/30'}`}
+                    type="button"
+                    className={`badge border transition-colors cursor-pointer ${selectedBlocks.includes(b.id) ? 'bg-primary text-black border-primary font-bold' : 'bg-transparent text-sec border-white/10 hover:border-white/30'}`}
                     onClick={() => handleToggleBlock(b.id)}
                   >
                     Block {b.number}
@@ -280,11 +418,12 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
             {success && <div className="alert alert-success text-xs">{success}</div>}
 
             <button 
+              type="button"
               className="btn btn-primary btn-block mt-2" 
               onClick={handleAssignShift}
               disabled={loading}
             >
-              {loading ? 'Assigning...' : '📅 Assign Shift'}
+              {loading ? 'Assigning Shift...' : '📅 Assign Shift to Proctor'}
             </button>
           </div>
         </div>
@@ -293,15 +432,11 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
         <div className="card" style={{ gridColumn: 'span 2' }}>
           <div className="card-header flex justify-between items-center">
             <h3>🔴 Live Tracking & Audit Ledger</h3>
-            <button className="btn btn-sm btn-ghost border border-white/10 text-xs" onClick={async () => {
-              const updated = await fetch('/api/admin/shifts').then(r => r.json());
-              if (Array.isArray(updated)) setShifts(updated);
-              router.refresh();
-            }}>
-              🔄 Refresh
+            <button className="btn btn-sm btn-ghost border border-white/10 text-xs" onClick={fetchUpdatedData}>
+              🔄 Refresh Ledger
             </button>
           </div>
-          <div className="table-wrap" style={{ maxHeight: '500px', overflowY: 'auto' }}>
+          <div className="table-wrap" style={{ maxHeight: '520px', overflowY: 'auto' }}>
             <table className="table w-full">
               <thead className="sticky top-0 bg-[#161618] z-10 shadow-md border-b border-white/10">
                 <tr className="text-xs uppercase tracking-wider text-sec">
@@ -309,18 +444,19 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
                   <th className="p-4 text-left font-bold">Shift Details</th>
                   <th className="p-4 text-left font-bold">Live Status</th>
                   <th className="p-4 text-left font-bold">GPS Location</th>
+                  <th className="p-4 text-center font-bold">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {shifts.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="p-8 text-center text-sec">No shifts scheduled yet.</td>
+                    <td colSpan={5} className="p-8 text-center text-sec">No shifts scheduled yet.</td>
                   </tr>
                 ) : shifts.map(shift => (
                   <tr key={shift.id} className="border-b border-white/5 hover:bg-white/5 transition-colors">
                     <td className="p-4">
-                      <div className="font-bold text-sm">{shift.staff?.name}</div>
-                      <div className="text-xs font-mono text-muted">{shift.staff?.phone || 'No Phone'}</div>
+                      <div className="font-bold text-sm">{shift.staff?.name || 'Unassigned'}</div>
+                      <div className="text-xs font-mono text-muted">{shift.staff?.phone || shift.staff?.email || 'No Contact'}</div>
                     </td>
                     <td className="p-4">
                       <div className="font-bold text-xs text-accent mb-1">{shift.shiftName}</div>
@@ -364,6 +500,17 @@ export default function ShiftCommandCenterClient({ staffMembers, blocks, initial
                       ) : (
                         <span className="text-muted italic">Awaiting check-in...</span>
                       )}
+                    </td>
+                    <td className="p-4 text-center">
+                      <button
+                        type="button"
+                        className="btn btn-xs btn-ghost text-red-400 hover:text-red-300 border border-red-500/20 hover:border-red-500/50"
+                        onClick={() => handleCancelShift(shift.id)}
+                        disabled={deletingId === shift.id}
+                        title="Cancel this shift"
+                      >
+                        {deletingId === shift.id ? '...' : '🗑️ Cancel'}
+                      </button>
                     </td>
                   </tr>
                 ))}

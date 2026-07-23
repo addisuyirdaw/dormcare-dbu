@@ -9,7 +9,9 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 const DEFAULT_ASSET_TYPES = ['CHAIR', 'LOCKER', 'TABLE', 'BED', 'KEY'];
 
-export default function StaffDashboardClient({ user, activeShift, tickets, pendingClearances, resolvedToday, blocks = [] }: any) {
+export default function StaffDashboardClient({ user, activeShift, myShifts = [], tickets, pendingClearances, resolvedToday, blocks = [] }: any) {
+  // Local clearance state for instant UI updates (avoids waiting for router.refresh())
+  const [localClearances, setLocalClearances] = useState<any[]>(() => pendingClearances ?? []);
   const router = useRouter();
   const [view, setView] = useState<'home' | 'scan'>('home');
   const [checkingIn, setCheckingIn] = useState(false);
@@ -55,6 +57,9 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
         alert(`Error: ${data.error || data.message || 'Failed to update clearance.'}`);
         return;
       }
+      // ✅ Immediately update local state so buttons convert to status badges without page refresh
+      setLocalClearances(prev => prev.map(c => c.id === id ? { ...c, status: action } : c));
+      // Still refresh in background to sync server data
       router.refresh();
     } catch (e: any) {
       alert(`Network error: ${e.message}`);
@@ -77,7 +82,16 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
   const activeTickets = tickets.filter((t: any) => t.status === 'OPEN' || t.status === 'IN_PROGRESS');
   const resolvedTickets = tickets.filter((t: any) => t.status === 'RESOLVED' || t.status === 'REJECTED').slice(0, 5);
   
-  const activeClearances = pendingClearances.filter((c: any) => c.status === 'PENDING' || c.status === 'PENDING_STAFF_SIGNATURE');
+  // Show ALL localClearances in the active queue (including just-acted APPROVED/REJECTED)
+  // so the status badge renders in place of the buttons instead of the item disappearing.
+  // Items that were originally PENDING/PENDING_STAFF_SIGNATURE are shown; acted-on ones get badges.
+  const activeClearances = localClearances.filter((c: any) =>
+    c.status === 'PENDING' ||
+    c.status === 'PENDING_STAFF_SIGNATURE' ||
+    c.status === 'APPROVED' ||
+    c.status === 'REJECTED'
+  );
+  // History panel: use the server-side prop (pre-existing resolved records)
   const resolvedClearances = pendingClearances.filter((c: any) => c.status === 'APPROVED' || c.status === 'RELEASED' || c.status === 'REJECTED');
 
   // Notification Logic
@@ -320,31 +334,54 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
         {/* Shift Control Panel */}
         <div className="card card-p flex-col justify-between" style={{ gridColumn: 'span 1' }}>
           <div>
-            <h3 className="mb-4">Shift Status</h3>
-            <div className={`shift-banner ${activeShift ? 'on-duty' : 'off-duty'} mb-6`}>
+            <h3 className="mb-4">Shift & Duty Status</h3>
+            <div className={`shift-banner ${activeShift ? 'on-duty' : 'off-duty'} mb-4`}>
               <div className="flex items-center gap-3 mb-2">
                 <span className={`shift-indicator ${activeShift ? 'active' : 'inactive'}`} />
                 <span className="font-bold" style={{ fontSize: '1.2rem', color: activeShift ? 'var(--green)' : 'var(--red)' }}>
-                  {activeShift ? 'ON DUTY' : 'OFF DUTY'}
+                  {activeShift ? 'ON DUTY (ACTIVE)' : 'OFF DUTY'}
                 </span>
               </div>
               <p className="text-xs" style={{ opacity: 0.8 }}>
-                {activeShift ? `Coverage active for ${user.managedBlocks?.length} blocks` : 'You are currently inactive'}
+                {activeShift ? `Coverage active for ${user.managedBlocks?.length || 1} block(s)` : 'Awaiting location check-in for assigned shift'}
               </p>
             </div>
+
+            {/* Assigned Shift Schedule Display */}
+            {myShifts && myShifts.length > 0 && (
+              <div className="mb-4 p-3 bg-black/40 border border-white/10 rounded">
+                <div className="text-xs font-bold text-accent mb-2 uppercase tracking-wider">📅 Assigned Shift Schedule</div>
+                <div className="max-h-36 overflow-y-auto flex flex-col gap-2">
+                  {myShifts.map((s: any) => (
+                    <div key={s.id} className="text-xs bg-white/5 p-2 rounded border border-white/10 flex flex-col gap-1">
+                      <div className="font-bold text-primary flex justify-between">
+                        <span>{s.shiftName}</span>
+                        <span className="text-[10px] text-sec uppercase font-mono">{s.isActive ? '🟢 Active' : '🗓️ Scheduled'}</span>
+                      </div>
+                      <div className="text-[10px] text-sec">
+                        {new Date(s.startTime).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })} - {new Date(s.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </div>
+                      <div className="text-[10px] text-muted">
+                        Blocks: {s.blocks?.map((b: any) => b.number).join(', ') || 'Campus'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {geoError && <div className="alert alert-error mb-4" style={{ fontSize: '0.8rem' }}>{geoError}</div>}
           </div>
           
           {activeShift ? (
-            <button id="checkout-btn" className="btn btn-danger btn-block" onClick={handleCheckOut}>End Shift</button>
+            <button id="checkout-btn" className="btn btn-danger btn-block mt-2" onClick={handleCheckOut}>End Shift</button>
           ) : (
-            <button id="checkin-btn" className="btn btn-primary btn-block btn-lg" onClick={handleCheckIn} disabled={checkingIn}>
-              {checkingIn ? <><span className="spinner" /> Verifying Location…</> : '📍 Start Multi-Block Shift'}
+            <button id="checkin-btn" className="btn btn-primary btn-block btn-lg mt-2" onClick={handleCheckIn} disabled={checkingIn}>
+              {checkingIn ? <><span className="spinner" /> Verifying Location & Selfie…</> : '📍 Start Shift (Check In)'}
             </button>
           )}
         </div>
 
-        {/* Quick Launch Cards */}
         <div className="grid-2 gap-6" style={{ gridColumn: 'span 2' }}>
 
           {/* Asset Registration Portal */}
@@ -707,25 +744,37 @@ export default function StaffDashboardClient({ user, activeShift, tickets, pendi
                               </div>
                             </div>
 
-                            {/* Direct Approval Actions (Always clickable immediately) */}
-                            <div className="flex gap-2 pt-1">
-                              <button
-                                className="flex-1 btn btn-sm"
-                                style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid var(--green)', color: 'var(--green)', fontWeight: 700 }}
-                                disabled={isProcessing}
-                                onClick={() => { if (confirm(`Approve clearance for ${c.student.name}?`)) handleClearanceAction(c.id, 'APPROVED'); }}
-                              >
-                                {isProcessing ? '…' : '✓ Approve Clearance'}
-                              </button>
-                              <button
-                                className="flex-1 btn btn-sm"
-                                style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid var(--red)', color: 'var(--red)', fontWeight: 700 }}
-                                disabled={isProcessing}
-                                onClick={() => onRejectClearance(c.id)}
-                              >
-                                {isProcessing ? '…' : '✗ Reject Request'}
-                              </button>
-                            </div>
+                            {/* Direct Approval Actions — convert to status badge once acted on */}
+                            {c.status === 'APPROVED' ? (
+                              <div className="flex items-center justify-center gap-2 py-3 rounded-xl" style={{ background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)' }}>
+                                <span style={{ fontSize: '1.3rem' }}>✅</span>
+                                <span className="font-black text-sm tracking-wider" style={{ color: '#10b981' }}>APPROVED BY YOU</span>
+                              </div>
+                            ) : c.status === 'REJECTED' ? (
+                              <div className="flex items-center justify-center gap-2 py-3 rounded-xl" style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)' }}>
+                                <span style={{ fontSize: '1.3rem' }}>❌</span>
+                                <span className="font-black text-sm tracking-wider" style={{ color: '#ef4444' }}>REJECTED</span>
+                              </div>
+                            ) : (
+                              <div className="flex gap-2 pt-1">
+                                <button
+                                  className="flex-1 btn btn-sm"
+                                  style={{ background: 'rgba(16,185,129,0.15)', border: '1px solid var(--green)', color: 'var(--green)', fontWeight: 700 }}
+                                  disabled={isProcessing}
+                                  onClick={() => { if (confirm(`Approve clearance for ${c.student.name}?`)) handleClearanceAction(c.id, 'APPROVED'); }}
+                                >
+                                  {isProcessing ? '…' : '✓ Approve Clearance'}
+                                </button>
+                                <button
+                                  className="flex-1 btn btn-sm"
+                                  style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid var(--red)', color: 'var(--red)', fontWeight: 700 }}
+                                  disabled={isProcessing}
+                                  onClick={() => onRejectClearance(c.id)}
+                                >
+                                  {isProcessing ? '…' : '✗ Reject Request'}
+                                </button>
+                              </div>
+                            )}
                           </div>
                         );
                       })()}
